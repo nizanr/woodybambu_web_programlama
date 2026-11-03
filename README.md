@@ -31,7 +31,7 @@ Tarayıcı testleri varsayılan olarak `/usr/bin/chromium` kullanır; farklı yo
 - Yönetici: ürün/kategori/3D model/stok yönetimi, sırayla ilerleyen sipariş durumları (Ödendi → Hazırlanıyor → Kargolandı → Teslim Edildi), ürün etkileşim ve sepet terk raporları, CSV dışa aktarma.
 - Admin: rol yönetimi, kargo/indirim/analitik/3D önizleme parametreleri, indirim kodları ve denetim kaydı.
 - İzin tabanlı davranış analitiği (product_view, add_to_cart, remove_from_cart, checkout_start, purchase); izin verilmezse olay kaydedilmez.
-- “Bahçede Gör” yalnızca oturum açmış kullanıcıya açılır. Three.js ile temsili model veya HTTPS GLB/GLTF dosyası; JPEG/PNG bahçe fotoğrafında fare/dokunmatik ile sürükleme, döndürme ve boyutlandırma; fotoğrafı yeniden yüklemeden başka ürün deneme ve önizlemeden sepete ekleme. Fotoğraf yalnızca kullanıcı “hesabıma kaydet” derse sunucuya gider; olaylara ve loglara hiçbir zaman yazılmaz.
+- “Bahçede Gör” ziyaretçi dahil herkese açıktır; yerleşimi kaydetmek ve sepete eklemek için giriş gerekir. Three.js ile temsili model veya HTTPS GLB/GLTF dosyası; JPEG/PNG bahçe fotoğrafında fare/dokunmatik ile sürükleme, döndürme ve boyutlandırma; fotoğrafı yeniden yüklemeden başka ürün deneme ve önizlemeden sepete ekleme. Fotoğraf yalnızca kullanıcı “hesabıma kaydet” derse sunucuya gider; olaylara ve loglara hiçbir zaman yazılmaz.
 
 ## İlk admin oluşturma
 

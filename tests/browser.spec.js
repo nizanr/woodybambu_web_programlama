@@ -31,18 +31,27 @@ test("TC-01: catalog filtering, guest cart redirect and responsive layout", asyn
   await page.screenshot({ path: "/tmp/bahceni-mobile.png", fullPage: true });
 });
 
-test("TC-31: guest is sent to login before 3D preview", async ({ page }) => {
+test("TC-31: guest can preview; saving asks for login", async ({ page }) => {
   await page.goto(BASE);
   await page
     .locator(".product")
     .first()
     .getByRole("button", { name: "Bahçede Gör" })
     .click();
+  await expect(page.locator("canvas")).toBeVisible();
+  await page.locator(".studio input[type=file]").setInputFiles({
+    name: "garden.png",
+    mimeType: "image/png",
+    buffer: PNG,
+  });
+  await expect(page.locator(".scene")).toHaveCSS("background-image", /blob:/);
+  await page.locator(".studio input[type=range]").nth(1).fill("45");
+  await expect(page.getByText("Döndürme · 45°")).toBeVisible();
+  await page.getByRole("button", { name: "Yerleşimi kaydetmek için giriş yap" }).click();
   await expect(
-    page.getByText("3D önizlemeyi kullanmak için hesap oluşturup giriş yapınız."),
+    page.getByText("Yerleşimi kaydetmek veya satın almak için hesap oluşturup giriş yapınız."),
   ).toBeVisible();
   await expect(page.getByRole("heading", { name: "Yeniden merhaba." })).toBeVisible();
-  await expect(page.locator("canvas")).toHaveCount(0);
 });
 
 test("TC-23/25/27/28 + VAL-006: member preview, saved layout and demo checkout", async ({

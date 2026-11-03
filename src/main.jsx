@@ -240,7 +240,7 @@ function App() {
     setSelected(p);
     trackView(p);
   };
-  /* FR-027 / VAL-019: 3D önizleme yalnızca oturum açmış kullanıcıya açılır. */
+  /* FR-027: 3D önizleme ziyaretçi dahil herkese açıktır. */
   const openStudio = (p) => {
     const target =
       p?.model3dUrl && p.isActive !== false
@@ -248,17 +248,14 @@ function App() {
         : products.find((x) => x.model3dUrl && x.isActive !== false);
     if (!previewOn || !target) return notify(VAL.VAL018);
     setSelected(target);
-    if (!user) {
-      notify(VAL.VAL019);
-      setAfterLogin("studio");
-      setModal("login");
-      return;
-    }
     setModal("studio");
   };
   const add = async (p) => {
     if (!user) {
-      notify("Sepete eklemek için giriş yapın veya üye olun.");
+      notify(
+        modal === "studio" ? VAL.VAL019 : "Sepete eklemek için giriş yapın veya üye olun.",
+      );
+      if (modal === "studio") setAfterLogin("studio");
       setModal("login");
       return;
     }
@@ -774,7 +771,7 @@ function App() {
           </button>
         </div>
       )}
-      {modal === "studio" && selected && user && (
+      {modal === "studio" && selected && (
         <Suspense
           fallback={<div className="toast">3D stüdyo hazırlanıyor…</div>}
         >
@@ -786,6 +783,11 @@ function App() {
             notify={notify}
             settings={settings}
             onAddToCart={add}
+            onLoginRequest={() => {
+              notify(VAL.VAL019);
+              setAfterLogin("studio");
+              setModal("login");
+            }}
             onClose={() => setModal(null)}
           />
         </Suspense>

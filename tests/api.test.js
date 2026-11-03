@@ -515,9 +515,15 @@ test("FR-025: CSV export contains aggregates only", async () => {
 });
 
 /* ─── 3D önizleme ve yerleşim ─── */
-test("TC-31: preview requires an account (VAL-019)", async () => {
-  const r = await request(app).get("/api/preview/" + p.id).expect(401);
+test("TC-31: visitors can preview; saving a placement requires an account (VAL-019)", async () => {
+  const pub = await request(app).get("/api/preview/" + p.id).expect(200);
+  assert.equal(pub.body.model3dUrl, "builtin:chair");
+  const r = await request(app)
+    .post("/api/designs")
+    .send({ name: "Misafir", productId: p.id, x: 0, y: 0, scale: 1, rotation: 0 })
+    .expect(401);
   assert.equal(r.body.error, MSG.VAL019);
+  await request(app).post("/api/cart/items").send({ productId: p.id }).expect(401);
   const ok = await user.get("/api/preview/" + p.id).expect(200);
   assert.equal(ok.body.model3dUrl, "builtin:chair");
 });

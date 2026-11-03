@@ -8,8 +8,8 @@ Test adları `tests/api.test.js` (API) ve `tests/browser.spec.js` (tarayıcı) i
 
 | SRS rolü  | `users.role` | Not |
 | --------- | ------------ | --- |
-| Ziyaretçi | (oturum yok) | Katalog, arama, analitik izin tercihi |
-| Üye       | `customer`   | Sepet, ödeme, adres, kendi sipariş/yerleşimi, 3D önizleme |
+| Ziyaretçi | (oturum yok) | Katalog, arama, analitik izin tercihi, 3D önizleme (kaydetmeden) |
+| Üye       | `customer`   | Sepet, ödeme, adres, kendi sipariş/yerleşimi |
 | Yönetici  | `manager`    | Ürün/kategori/3D model/stok, sipariş durumu, toplu raporlar |
 | Admin     | `admin`      | Tüm yetkiler + rol, parametre, denetim kaydı |
 
@@ -45,7 +45,7 @@ Eski kayıtlar sunucu açılışında bir kez dönüştürülür: `user→custom
 | FR-024 | `PUT /api/admin/settings` (yalnızca admin) | TC-22 |
 | FR-025 | `GET /api/reports/summary.csv` yalnızca toplu veri | FR-025 testi |
 | FR-026 | Sağlayıcı hatasında anlaşılır mesaj; belirsiz sonuç `VAL-008`, başarılı sayılmaz | FR-026 testi |
-| FR-027 | “Bahçede Gör” oturum ister (`/api/preview/:id` 401); JPEG/PNG + boyut + okunabilirlik | TC-23, TC-24, TC-31 |
+| FR-027 | “Bahçede Gör” ziyaretçi dahil herkese açık; kaydetme/sepet giriş ister (VAL-019); JPEG/PNG + boyut + okunabilirlik | TC-23, TC-24, TC-31 |
 | FR-028 | `model3dUrl`: `builtin:*` temsili model veya HTTPS GLB/GLTF; yoksa VAL-018 | TC-25, TC-26 |
 | FR-029 | Fare sürükleme, tekerlek ölçek, dokunmatik tek parmak taşıma, iki parmak ölçek/döndürme, ok tuşları | TC-25 |
 | FR-030 | Stüdyoda ürün seçici; fotoğraf korunur | tarayıcı testi |
@@ -80,13 +80,13 @@ Eski kayıtlar sunucu açılışında bir kez dönüştürülür: `user→custom
 | BR-021 | Fotoğraf yalnızca “hesabıma kaydet” seçilirse saklanır; loglara yazılmaz |
 | BR-022 | Yerleşim ve fotoğraf uçları sahiplik filtresiyle |
 | BR-023 | Stüdyodan sepete ekleme aynı `/api/cart/items` ucunu kullanır |
-| BR-024 | `/api/preview/:id` ve `/api/designs*` sunucuda oturum ister |
+| BR-024 | *(SRS güncellemesi gerekir)* Önizleme herkese açık; `/api/designs*` ve `/api/cart*` sunucuda oturum ister |
 | BR-T01 | `settings.version` her güncellemede artar; sipariş oluşturulduğu sürümü saklar |
 | BR-T02 | Ayarlar yalnızca admin; önce/sonra değerleriyle `settings_update` kaydı |
 
 ## Validasyonlar
 
-Tüm mesajlar `server/rules.js` → `MSG` içinde SRS metniyle birebir tutulur (VAL-001 … VAL-020).
+Tüm mesajlar `server/rules.js` → `MSG` içinde SRS metniyle birebir tutulur (VAL-001 … VAL-020). İstisna: VAL-019 artık “Yerleşimi kaydetmek veya satın almak için hesap oluşturup giriş yapınız.” (önizleme herkese açıldı).
 
 ## Fonksiyonel olmayan gereksinimler
 
@@ -105,6 +105,22 @@ Tüm mesajlar `server/rules.js` → `MSG` içinde SRS metniyle birebir tutulur (
 | NFR-11 | Stüdyoda ölçülen model yükleme süresi `num_preview_load_sec` hedefiyle gösterilir |
 | NFR-12 | WebGL yoksa bilgilendirme; satın alma düğmesi çalışmaya devam eder |
 | NFR-13 | Fotoğraf imza baytı kontrolü, `nosniff`, `default-src 'none'` CSP ile yalnızca görüntü olarak sunulur |
+
+## SRS'ten bilinçli sapma: önizleme herkese açık
+
+Ekip kararıyla 3D önizleme ziyaretçilere de açıldı; yerleşimi kaydetme ve sepete ekleme hâlâ hesap gerektirir. SRS'in bir sonraki sürümünde şu maddeler güncellenmelidir:
+
+| Madde | Yeni ifade önerisi |
+| ----- | ------------------ |
+| 1.2 Kapsam | “3D önizleme tüm ziyaretçilere açıktır; yerleşimi kaydetmek ve satın almak için hesap gerekir.” |
+| 1.3 Roller | Ziyaretçi: “… fotoğraf üzerinde 3D önizleme (kaydetmeden)”; Üye: “yerleşimini hesabına kaydetme” |
+| 1.5 Adım 2 | Aktör: “Ziyaretçi / Üye” |
+| FR-027 | İlk cümle: “3D önizleme ziyaretçi dahil herkese sunulur; yerleşimi kaydetmek veya sepete eklemek isteyen oturumsuz kullanıcı giriş/kayıt sayfasına yönlendirilir (VAL-019).” |
+| BR-024 | “3D önizleme herkese açıktır; yerleşim kaydı ve satın alma yalnızca oturum açmış kullanıcıya sunulur ve sunucuda doğrulanır.” |
+| VAL-019 | Koşul: “Oturumsuz yerleşim kaydı / satın alma isteği”; Mesaj: “Yerleşimi kaydetmek veya satın almak için hesap oluşturup giriş yapınız.” |
+| 4. Yetki matrisi | “Fotoğraf üzerinde 3D önizleme kullanma”: Ziyaretçi ✓ (“hesap gerekir” notu kaldırılır) |
+| TC-31 | “Oturumsuz kullanıcı önizlemeyi açar ve modeli yerleştirir; ‘Yerleşimi kaydet’ seçince VAL-019 gösterilir ve giriş sayfasına yönlendirilir; kayıt API isteği reddedilir.” |
+| 10.2 Use-case | “Ziyaretçi / Üye → Bahçe fotoğrafında 3D önizleme yap” |
 
 ## Açık kararlar (SRS 10.7) — kodda uygulanan varsayımlar
 

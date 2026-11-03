@@ -18,7 +18,8 @@ export const MSG = {
   VAL016: "Lütfen JPEG veya PNG biçiminde bir fotoğraf yükleyiniz.",
   VAL017: "Fotoğraf yüklenemedi; dosya boyutu sınırı aşıldı veya dosya okunamadı.",
   VAL018: "Bu ürün için 3D önizleme şu anda kullanılamıyor.",
-  VAL019: "3D önizlemeyi kullanmak için hesap oluşturup giriş yapınız.",
+  // VAL-019: önizleme herkese açık; kaydetme/satın alma hesap ister.
+  VAL019: "Yerleşimi kaydetmek veya satın almak için hesap oluşturup giriş yapınız.",
   VAL020: "Kayıtlı yerleşim bulunamadı.",
 };
 

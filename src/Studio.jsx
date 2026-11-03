@@ -69,6 +69,7 @@ export default function Studio({
   notify,
   onClose,
   onAddToCart,
+  onLoginRequest,
   settings,
 }) {
   const host = useRef(),
@@ -89,13 +90,14 @@ export default function Studio({
     [loadMs, setLoadMs] = useState(null),
     [busy, setBusy] = useState(false);
   const canSave = preview.saveLayoutEnabled && ["customer", "admin"].includes(user?.role);
-  const canBuy = ["customer", "admin"].includes(user?.role);
+  const canBuy = !user || ["customer", "admin"].includes(user.role);
 
   useEffect(() => {
-    api("/api/designs")
-      .then(setSaved)
-      .catch(() => {});
-  }, []);
+    if (user)
+      api("/api/designs")
+        .then(setSaved)
+        .catch(() => {});
+  }, [user?.id]);
 
   /* Sahne bir kez kurulur; ürün değişince yalnızca model değişir (FR-030). */
   useEffect(() => {
@@ -492,6 +494,11 @@ export default function Studio({
                   Yerleşimimi kaydet
                 </button>
               </>
+            )}
+            {!user && preview.saveLayoutEnabled && (
+              <button className="secondary" onClick={onLoginRequest}>
+                Yerleşimi kaydetmek için giriş yap
+              </button>
             )}
             {saved.length > 0 && <strong>Kayıtlı yerleşimlerim</strong>}
             {saved.map((d) => (

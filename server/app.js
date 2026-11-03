@@ -182,7 +182,12 @@ export function createApp(uri, { paymentClient } = {}) {
 
   /* ─── Kimlik ve yetki (FR-018, BR-010, VAL-010) ─── */
   const auth = async (req, res, next) => {
-    if (!req.session.user) return fail(res, 401, "Önce giriş yapın");
+    if (!req.session.user)
+      return fail(
+        res,
+        401,
+        req.path.startsWith("/api/designs") ? MSG.VAL019 : "Önce giriş yapın",
+      );
     const u = await User.findById(req.session.user.id);
     if (!u) return fail(res, 401, "Önce giriş yapın");
     req.currentUser = u;
@@ -329,9 +334,9 @@ export function createApp(uri, { paymentClient } = {}) {
     res.json(p);
   });
 
-  /* ─── 3D önizleme erişimi (FR-027/028, BR-024, VAL-018/019) ─── */
+  /* ─── 3D önizleme (FR-027/028, VAL-018): ziyaretçi dahil herkese açık.
+     Yerleşim kaydı ve sepet oturum ister (BR-024, VAL-019). ─── */
   app.get("/api/preview/:productId", async (req, res) => {
-    if (!req.session.user) return fail(res, 401, MSG.VAL019);
     const s = await getSettings();
     if (!s.preview.enabled) return fail(res, 404, MSG.VAL018);
     if (!isId(req.params.productId)) return fail(res, 404, MSG.VAL018);
