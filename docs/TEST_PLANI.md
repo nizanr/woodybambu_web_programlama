@@ -28,8 +28,8 @@ Bu liste planlı kontrollerdir, bulunan hatalar değildir. Otomatik test sonuçl
 | T022 | Yetkilendirme | Kullanıcı admin erişimi                 | Bekliyor | —                  |
 | T023 | Yetkilendirme | Admin ürün ekleme                       | Bekliyor | —                  |
 | T024 | Yetkilendirme | Admin ürün düzenleme                    | Bekliyor | —                  |
-| T025 | Yetkilendirme | Admin rol değişikliği reddi             | Bekliyor | —                  |
-| T026 | Yetkilendirme | Süper admin rol değişikliği             | Bekliyor | —                  |
+| T025 | Yetkilendirme | Yönetici rol değişikliği reddi          | Bekliyor | —                  |
+| T026 | Yetkilendirme | Admin rol değişikliği                   | Bekliyor | —                  |
 | T027 | Yetkilendirme | Kendi rolünü düşürme reddi              | Bekliyor | —                  |
 | T028 | Yetkilendirme | Rol değişince eski oturum               | Bekliyor | —                  |
 | T029 | Yetkilendirme | Başkasının siparişini ödeme             | Bekliyor | —                  |

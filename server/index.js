@@ -1,8 +1,9 @@
 import { connectDB } from "./db.js";
-import { createApp, seed } from "./app.js";
+import { createApp, migrate, seed } from "./app.js";
 import express from "express";
 import { bootstrapAdmin } from "./bootstrap-admin.js";
 const uri = await connectDB();
+await migrate();
 await seed();
 await bootstrapAdmin({
   email: process.env.ADMIN_EMAIL,

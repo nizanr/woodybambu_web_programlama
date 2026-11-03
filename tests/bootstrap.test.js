@@ -4,14 +4,14 @@ import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 import { User } from "../server/db.js";
 import { bootstrapAdmin } from "../server/bootstrap-admin.js";
+import { testUri, stopMemory } from "./helpers/mongo.js";
 before(async () => {
-  await mongoose.connect(
-    "mongodb://127.0.0.1:27017/bahceni_bootstrap_test_" + Date.now(),
-  );
+  await mongoose.connect(await testUri("bahceni_bootstrap_test"));
 });
 after(async () => {
   await mongoose.connection.dropDatabase();
   await mongoose.disconnect();
+  await stopMemory();
 });
 test("missing optional bootstrap does not create an account", async () => {
   await bootstrapAdmin();
@@ -28,7 +28,7 @@ test("existing customer cannot be promoted by bootstrap", async () => {
     name: "Customer",
     email: "customer@test.example",
     password: "existing-hash",
-    role: "user",
+    role: "customer",
   });
   await assert.rejects(
     bootstrapAdmin({
@@ -38,16 +38,16 @@ test("existing customer cannot be promoted by bootstrap", async () => {
   );
   assert.equal(
     (await User.findOne({ email: "customer@test.example" })).role,
-    "user",
+    "customer",
   );
 });
-test("first admin gets hashed password and superadmin role", async () => {
+test("first admin gets hashed password and admin role", async () => {
   await bootstrapAdmin({
     email: "OWNER@test.example",
     password: "ExamplePass123!",
   });
   const u = await User.findOne({ email: "owner@test.example" });
-  assert.equal(u.role, "superadmin");
+  assert.equal(u.role, "admin");
   assert.notEqual(u.password, "ExamplePass123!");
   assert.ok(await bcrypt.compare("ExamplePass123!", u.password));
 });
@@ -59,12 +59,12 @@ test("restart never resets existing admin password", async () => {
   });
   assert.equal((await User.findById(before.id)).password, before.password);
 });
-test("bootstrap cannot create a second superadmin", async () => {
+test("bootstrap cannot create a second admin", async () => {
   await assert.rejects(
     bootstrapAdmin({
       email: "other@test.example",
       password: "ExamplePass123!",
     }),
   );
-  assert.equal(await User.countDocuments({ role: "superadmin" }), 1);
+  assert.equal(await User.countDocuments({ role: "admin" }), 1);
 });

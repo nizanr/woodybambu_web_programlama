@@ -6,7 +6,7 @@ export default defineConfig({
   use: {
     headless: true,
     launchOptions: {
-      executablePath: "/usr/bin/chromium",
+      executablePath: process.env.CHROMIUM_PATH || "/usr/bin/chromium",
       args: ["--no-sandbox", "--enable-unsafe-swiftshader"],
     },
   },

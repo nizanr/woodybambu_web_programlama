@@ -11,7 +11,7 @@ bash scripts/setup.sh
 npm run dev
 ```
 
-Uygulama 3000 portunda çalışır. Harici MongoDB kullanıyorsanız `MONGODB_URI` tanımlayın; Docker yerine kendi servisinizi başlatın ve `npm ci` çalıştırın. Testler ayrı, geçici isimli MongoDB veritabanını kullanır ve bitince yalnızca onu siler.
+Uygulama 3000 portunda çalışır. Harici MongoDB kullanıyorsanız `MONGODB_URI` tanımlayın; Docker yerine kendi servisinizi başlatın ve `npm ci` çalıştırın. Geliştirmede MongoDB bulunamazsa bellek içi veritabanı açılır. Testler varsayılan olarak geçici bir bellek içi MongoDB kullanır; mevcut bir sunucuyu kullanmak için `MONGODB_TEST_URI=mongodb://127.0.0.1:27017` tanımlayın (her test dosyası ayrı veritabanı açar ve yalnızca onu siler).
 
 ```bash
 npm test                    # API entegrasyon testleri
@@ -19,18 +19,21 @@ npx playwright test         # çalışan uygulama üzerinde tarayıcı testleri
 npm run build               # React üretim derlemesi
 ```
 
-Tarayıcı testleri `/usr/bin/chromium` kullanır; farklı makinelerde `playwright.config.js` içindeki tarayıcı yolunu uyarlayın.
+Tarayıcı testleri varsayılan olarak `/usr/bin/chromium` kullanır; farklı yol için `CHROMIUM_PATH` ortam değişkenini verin. Test adlarındaki `TC-xx` kimlikleri SRS test senaryolarıdır; gereksinim → kod → test eşlemesi [Gereksinim izlenebilirlik matrisi](docs/GEREKSINIM_IZLENEBILIRLIK.md) dosyasındadır.
 
 ## Özellikler
 
 - Türkçe ve mobil uyumlu katalog; kategori, arama, fiyat sıralaması, ürün detayı.
-- Şifreleri bcrypt ile saklayan üyelik, MongoDB'de oturum, kullanıcı/admin/süper admin rolleri.
-- Adet kontrollü sepet; sunucu taraflı fiyat hesaplama ve atomik stok ayırma.
+- Şifreleri bcrypt ile saklayan üyelik, MongoDB'de oturum; SRS'teki Üye (`customer`), Yönetici (`manager`) ve Admin (`admin`) rolleri. Eski `user/admin/superadmin` kayıtları ilk açılışta otomatik dönüştürülür.
+- Sunucuda tutulan, stok kontrollü sepet; ara toplam, indirim kodu, kargo ve genel toplam sunucuda hesaplanır. Stok yalnızca doğrulanmış ödemeden sonra ve tek sefer düşer.
 - Demo ödeme ile sipariş oluşturma; iyzico sandbox checkout entegrasyonu ve sunucu taraflı ödeme sorgulama.
-- Kullanıcıya ait siparişler; admin ürün düzenleme/ekleme, sipariş sevki; yalnızca süper admine rol yönetimi.
-- Three.js ile ürüne göre üretilen temsili 3D mobilya; JPEG/PNG bahçe fotoğrafında sürükleme, döndürme ve boyutlandırma. Fotoğraf sunucuya gönderilmez. Yerleşim verileri kullanıcı hesabında kaydedilir.
+- Adres defteri, mesafeli satış sözleşmesi onayı, sistem içi bildirimler ve kendi sipariş geçmişi.
+- Yönetici: ürün/kategori/3D model/stok yönetimi, sırayla ilerleyen sipariş durumları (Ödendi → Hazırlanıyor → Kargolandı → Teslim Edildi), ürün etkileşim ve sepet terk raporları, CSV dışa aktarma.
+- Admin: rol yönetimi, kargo/indirim/analitik/3D önizleme parametreleri, indirim kodları ve denetim kaydı.
+- İzin tabanlı davranış analitiği (product_view, add_to_cart, remove_from_cart, checkout_start, purchase); izin verilmezse olay kaydedilmez.
+- “Bahçede Gör” yalnızca oturum açmış kullanıcıya açılır. Three.js ile temsili model veya HTTPS GLB/GLTF dosyası; JPEG/PNG bahçe fotoğrafında fare/dokunmatik ile sürükleme, döndürme ve boyutlandırma; fotoğrafı yeniden yüklemeden başka ürün deneme ve önizlemeden sepete ekleme. Fotoğraf yalnızca kullanıcı “hesabıma kaydet” derse sunucuya gider; olaylara ve loglara hiçbir zaman yazılmaz.
 
-## Süper admin oluşturma
+## İlk admin oluşturma
 
 Kendiliğinden admin hesabı açılmaz. Yerel terminalde e-posta ve şifreyi okuyun; şifre terminalde görünmez ve Git'e eklenmez:
 
@@ -42,7 +45,7 @@ node server/create-admin.js
 unset ADMIN_EMAIL ADMIN_PASSWORD
 ```
 
-Script mevcut hesapların rolünü veya şifresini değiştirmez. Oluşturduğunuz hesapla giriş yapıp Hesabım → Yönetim paneli yolunu kullanın. Admin ürün ve sipariş yönetir; süper admin ayrıca diğer kullanıcıların rolünü değiştirir.
+Script mevcut hesapların rolünü veya şifresini değiştirmez. Oluşturduğunuz hesapla giriş yapıp Hesabım → Yönetim paneli yolunu kullanın. Yönetici ürün, kategori, stok, sipariş ve raporları yönetir; Admin ayrıca rolleri, parametreleri ve denetim kaydını yönetir.
 
 ## iyzico sandbox
 
@@ -52,10 +55,11 @@ Sandbox örneği sabit test telefon/kimlik ve şehir verisi kullanır; gerçek k
 
 Ödeme başarılı sayfasına dönmek tek başına ödeme kanıtı değildir: API sağlayıcıdan `paymentStatus` ve tutarı kontrol eder. Giriş oturumunun korunmadığı dönüşte tekrar giriş yapıp Siparişlerim → Ödeme durumunu doğrula seçeneğini kullanın.
 
-Sandbox anahtarları sağlanmadığı için sağlayıcıyla uçtan uca ödeme henüz doğrulanmadı. Bu bir ders projesi test entegrasyonudur; canlı ödeme kullanımına hazır olduğu iddia edilmez. iyzico ödemesi bekleyen siparişler stok ayırır; iptal/oturum süresi dolma ve sağlayıcı mutabakatı canlı kullanım öncesi ayrıca geliştirilmelidir. Demo sipariş iptali stokları geri ekler.
+Sandbox anahtarları sağlanmadığı için sağlayıcıyla uçtan uca ödeme henüz doğrulanmadı. Bu bir ders projesi test entegrasyonudur; canlı ödeme kullanımına hazır olduğu iddia edilmez. Stok, SRS BR-005 gereği ödeme başlatılırken yalnızca kontrol edilir ve sağlayıcı doğrulamasından sonra düşer. Aynı son ürün için iki ödeme aynı anda doğrulanırsa ikincisi `stock_conflict` (iade gerekli) olarak işaretlenir ve yöneticilere bildirim düşer; iade/mutabakat akışı canlı kullanım öncesi ayrıca geliştirilmelidir.
 
 ## Mimari ve ders teslimleri
 
+- [Gereksinim izlenebilirlik matrisi](docs/GEREKSINIM_IZLENEBILIRLIK.md): SRS FR/BR/VAL/NFR/TC kimliklerinin uygulandığı yer, testleri ve açık kararlar için kullanılan varsayımlar.
 - [Kod rehberi](docs/KOD_REHBERI.md): dosyalar, veri akışı ve canlı kodlama örnekleri.
 - [İş planı](docs/IS_PLANI.md): 8 iş paketi, sorumlular, 8 hafta ve 3 sunum.
 - [Test planı](docs/TEST_PLANI.md): 100 planlı test senaryosu; hata raporu değildir.
