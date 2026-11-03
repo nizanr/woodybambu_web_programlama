@@ -907,35 +907,54 @@ td select {
 .reveal {
   opacity: 0;
   transform: translateY(40px);
-  transition: opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1),
-              transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+  transition:
+    opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .reveal.visible {
   opacity: 1;
   transform: translateY(0);
 }
 /* Stagger delays for grid children */
-.reveal-stagger > .reveal:nth-child(1) { transition-delay: 0s; }
-.reveal-stagger > .reveal:nth-child(2) { transition-delay: 0.1s; }
-.reveal-stagger > .reveal:nth-child(3) { transition-delay: 0.2s; }
-.reveal-stagger > .reveal:nth-child(4) { transition-delay: 0.3s; }
-.reveal-stagger > .reveal:nth-child(5) { transition-delay: 0.4s; }
-.reveal-stagger > .reveal:nth-child(6) { transition-delay: 0.5s; }
-.reveal-stagger > .reveal:nth-child(7) { transition-delay: 0.6s; }
-.reveal-stagger > .reveal:nth-child(8) { transition-delay: 0.7s; }
+.reveal-stagger > .reveal:nth-child(1) {
+  transition-delay: 0s;
+}
+.reveal-stagger > .reveal:nth-child(2) {
+  transition-delay: 0.1s;
+}
+.reveal-stagger > .reveal:nth-child(3) {
+  transition-delay: 0.2s;
+}
+.reveal-stagger > .reveal:nth-child(4) {
+  transition-delay: 0.3s;
+}
+.reveal-stagger > .reveal:nth-child(5) {
+  transition-delay: 0.4s;
+}
+.reveal-stagger > .reveal:nth-child(6) {
+  transition-delay: 0.5s;
+}
+.reveal-stagger > .reveal:nth-child(7) {
+  transition-delay: 0.6s;
+}
+.reveal-stagger > .reveal:nth-child(8) {
+  transition-delay: 0.7s;
+}
 
 /* Reveal from left/right */
 .reveal-left {
   opacity: 0;
   transform: translateX(-50px);
-  transition: opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1),
-              transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+  transition:
+    opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .reveal-right {
   opacity: 0;
   transform: translateX(50px);
-  transition: opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1),
-              transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+  transition:
+    opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .reveal-left.visible,
 .reveal-right.visible {
@@ -951,19 +970,40 @@ td select {
 
 /* Hero text entrance */
 @keyframes heroFadeUp {
-  from { opacity: 0; transform: translateY(35px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(35px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
-.hero-content .eyebrow { animation: heroFadeUp 0.9s 0.2s both cubic-bezier(0.16, 1, 0.3, 1); }
-.hero-content h1       { animation: heroFadeUp 0.9s 0.4s both cubic-bezier(0.16, 1, 0.3, 1); }
-.hero-content p        { animation: heroFadeUp 0.9s 0.55s both cubic-bezier(0.16, 1, 0.3, 1); }
-.hero-buttons          { animation: heroFadeUp 0.9s 0.7s both cubic-bezier(0.16, 1, 0.3, 1); }
-.hero-bottom           { animation: heroFadeUp 0.9s 0.85s both cubic-bezier(0.16, 1, 0.3, 1); }
+.hero-content .eyebrow {
+  animation: heroFadeUp 0.9s 0.2s both cubic-bezier(0.16, 1, 0.3, 1);
+}
+.hero-content h1 {
+  animation: heroFadeUp 0.9s 0.4s both cubic-bezier(0.16, 1, 0.3, 1);
+}
+.hero-content p {
+  animation: heroFadeUp 0.9s 0.55s both cubic-bezier(0.16, 1, 0.3, 1);
+}
+.hero-buttons {
+  animation: heroFadeUp 0.9s 0.7s both cubic-bezier(0.16, 1, 0.3, 1);
+}
+.hero-bottom {
+  animation: heroFadeUp 0.9s 0.85s both cubic-bezier(0.16, 1, 0.3, 1);
+}
 
 /* Floating pill pulse */
 @keyframes floatPulse {
-  0%, 100% { transform: translateY(0); }
-  50%      { transform: translateY(-6px); }
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
 }
 .floating-pill {
   animation: floatPulse 3s ease-in-out infinite;
@@ -971,8 +1011,9 @@ td select {
 
 /* Product card micro-animations */
 .product {
-  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1),
-              box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  transition:
+    transform 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1);
   border-radius: 5px;
 }
 .product:hover {
@@ -980,7 +1021,7 @@ td select {
   box-shadow: 0 20px 50px -12px rgba(41, 63, 50, 0.15);
 }
 .product-image::after {
-  content: '';
+  content: "";
   position: absolute;
   inset: 0;
   background: linear-gradient(to top, rgba(41, 63, 50, 0.12), transparent 50%);
@@ -995,18 +1036,23 @@ td select {
 .try-btn {
   opacity: 0;
   transform: translateY(8px);
-  transition: opacity 0.35s, transform 0.35s, background 0.2s;
+  transition:
+    opacity 0.35s,
+    transform 0.35s,
+    background 0.2s;
 }
 .product:hover .try-btn {
   opacity: 1;
   transform: translateY(0);
 }
 .quick-add {
-  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s;
+  transition:
+    transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 0.25s;
 }
 .quick-add:hover {
   transform: scale(1.15);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 .product-tag {
   transition: background 0.3s;
@@ -1026,10 +1072,11 @@ td select {
 .glass-btn,
 .primary,
 .secondary {
-  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1),
-              box-shadow 0.25s,
-              background 0.25s,
-              border-color 0.25s;
+  transition:
+    transform 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.25s,
+    background 0.25s,
+    border-color 0.25s;
 }
 .cream-btn:hover {
   transform: translateY(-2px);
@@ -1080,8 +1127,14 @@ td select {
 
 /* Page fade transition */
 @keyframes pageFadeIn {
-  from { opacity: 0; transform: translateY(15px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(15px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 .page-transition {
   animation: pageFadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1);
@@ -1099,8 +1152,12 @@ td select {
   }
 }
 @keyframes overlayIn {
-  from { opacity: 0; }
-  to   { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 .overlay {
   animation: overlayIn 0.3s;
@@ -1120,10 +1177,12 @@ td select {
 
 /* Navbar scroll effect */
 .navbar {
-  transition: box-shadow 0.3s, height 0.3s;
+  transition:
+    box-shadow 0.3s,
+    height 0.3s;
 }
 .navbar.scrolled {
-  box-shadow: 0 2px 20px rgba(0,0,0,0.06);
+  box-shadow: 0 2px 20px rgba(0, 0, 0, 0.06);
   height: 75px;
 }
 
@@ -1138,8 +1197,12 @@ td select {
 
 /* Announcement marquee shimmer */
 @keyframes shimmer {
-  0%   { background-position: -200% center; }
-  100% { background-position: 200% center; }
+  0% {
+    background-position: -200% center;
+  }
+  100% {
+    background-position: 200% center;
+  }
 }
 .announcement span {
   background: linear-gradient(90deg, #e8ece2 0%, #ffffffcc 50%, #e8ece2 100%);
@@ -1152,8 +1215,14 @@ td select {
 
 /* Cart item slide-in */
 @keyframes cartItemIn {
-  from { opacity: 0; transform: translateX(-15px); }
-  to   { opacity: 1; transform: translateX(0); }
+  from {
+    opacity: 0;
+    transform: translateX(-15px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 .cart-item {
   animation: cartItemIn 0.35s cubic-bezier(0.16, 1, 0.3, 1);
@@ -1180,7 +1249,7 @@ td select {
   font-size: 11px;
   font-weight: 500;
   color: var(--green);
-  box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
   border: 1px solid rgba(225, 227, 218, 0.6);
   animation: counterIn 0.6s cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -1193,7 +1262,7 @@ td select {
   flex-shrink: 0;
 }
 .visitor-counter .pulse-dot::after {
-  content: '';
+  content: "";
   position: absolute;
   inset: -3px;
   border-radius: 50%;
@@ -1201,12 +1270,25 @@ td select {
   animation: pulseDot 2s ease-in-out infinite;
 }
 @keyframes pulseDot {
-  0%, 100% { transform: scale(1); opacity: 0.6; }
-  50% { transform: scale(1.8); opacity: 0; }
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  50% {
+    transform: scale(1.8);
+    opacity: 0;
+  }
 }
 @keyframes counterIn {
-  from { opacity: 0; transform: translateY(10px) scale(0.9); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 .visitor-counter .count {
   font-weight: 700;
@@ -1548,7 +1630,9 @@ td select {
     transition: none !important;
     animation: none !important;
   }
-  .reveal, .reveal-left, .reveal-right {
+  .reveal,
+  .reveal-left,
+  .reveal-right {
     opacity: 1 !important;
     transform: none !important;
   }

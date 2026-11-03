@@ -150,7 +150,12 @@ function Products({ data, editing, setEditing, send }) {
       >
         <label>
           Ürün adı
-          <input name="name" required maxLength="120" defaultValue={editing?.name} />
+          <input
+            name="name"
+            required
+            maxLength="120"
+            defaultValue={editing?.name}
+          />
         </label>
         <label>
           Kategori
@@ -198,11 +203,19 @@ function Products({ data, editing, setEditing, send }) {
         </label>
         <label>
           Görsel adresi (HTTPS veya /images/…)
-          <input name="image" type="text" required defaultValue={editing?.image} />
+          <input
+            name="image"
+            type="text"
+            required
+            defaultValue={editing?.image}
+          />
         </label>
         <label>
           3D model
-          <select value={modelKind} onChange={(e) => setModelKind(e.target.value)}>
+          <select
+            value={modelKind}
+            onChange={(e) => setModelKind(e.target.value)}
+          >
             {Object.entries(MODEL_TYPES).map(([v, l]) => (
               <option key={v} value={v}>
                 {l}
@@ -226,11 +239,19 @@ function Products({ data, editing, setEditing, send }) {
         )}
         <label>
           Model rengi
-          <input name="color" type="color" defaultValue={editing?.color || "#b79b77"} />
+          <input
+            name="color"
+            type="color"
+            defaultValue={editing?.color || "#b79b77"}
+          />
         </label>
         <label>
           Açıklama
-          <input name="description" maxLength="1000" defaultValue={editing?.description} />
+          <input
+            name="description"
+            maxLength="1000"
+            defaultValue={editing?.description}
+          />
         </label>
         <button className="primary">Kaydet</button>
         {editing && (
@@ -282,7 +303,14 @@ function Categories({ data, send }) {
         onSubmit={async (e) => {
           e.preventDefault();
           const name = new FormData(e.target).get("name");
-          if (await send("/api/admin/categories", "POST", { name }, "Kategori eklendi"))
+          if (
+            await send(
+              "/api/admin/categories",
+              "POST",
+              { name },
+              "Kategori eklendi",
+            )
+          )
             e.target.reset();
         }}
       >
@@ -306,7 +334,9 @@ function Categories({ data, send }) {
             {data.categories.map((c) => (
               <tr key={c._id}>
                 <td>{c.name}</td>
-                <td>{data.products.filter((p) => p.categoryId === c._id).length}</td>
+                <td>
+                  {data.products.filter((p) => p.categoryId === c._id).length}
+                </td>
                 <td>{c.isActive ? "Aktif" : "Pasif"}</td>
                 <td>
                   <button
@@ -422,13 +452,18 @@ function Reports({ api, notify }) {
           CSV dışa aktar
         </a>
       </form>
-      {error && <p className="form-error" role="alert">{error}</p>}
+      {error && (
+        <p className="form-error" role="alert">
+          {error}
+        </p>
+      )}
       {report && (
         <>
           <p className="muted">
-            Dönem: {report.range.from} – {report.range.to} ({report.range.timezone}) ·
-            Son güncelleme: {istanbulDate(report.lastUpdated)} · Rapor geçmiş
-            olayları gösterir, anlık kesin sonuç garantisi vermez.
+            Dönem: {report.range.from} – {report.range.to} (
+            {report.range.timezone}) · Son güncelleme:{" "}
+            {istanbulDate(report.lastUpdated)} · Rapor geçmiş olayları gösterir,
+            anlık kesin sonuç garantisi vermez.
           </p>
           <div className="stats kpis">
             <div>
@@ -448,7 +483,9 @@ function Reports({ api, notify }) {
               <h2>{report.kpis.purchases}</h2>
             </div>
             <div>
-              <small>SEPET TERK ({report.range.abandonmentHours} sa) · oturum</small>
+              <small>
+                SEPET TERK ({report.range.abandonmentHours} sa) · oturum
+              </small>
               <h2>{pct(report.kpis.abandonmentRate)}</h2>
             </div>
             <div>
@@ -541,20 +578,81 @@ function Users({ data, user, send }) {
 }
 
 const FIELDS = [
-  ["commerce", "shippingFee", "num_shipping_fee — Kargo bedeli (TL)", "number", 0.01],
-  ["commerce", "freeShipThreshold", "num_free_ship_threshold — Ücretsiz kargo alt limiti (0 = kapalı)", "number", 0.01],
-  ["commerce", "couponEnabled", "chk_coupon_enabled — İndirim kodu alanı", "checkbox"],
+  [
+    "commerce",
+    "shippingFee",
+    "num_shipping_fee — Kargo bedeli (TL)",
+    "number",
+    0.01,
+  ],
+  [
+    "commerce",
+    "freeShipThreshold",
+    "num_free_ship_threshold — Ücretsiz kargo alt limiti (0 = kapalı)",
+    "number",
+    0.01,
+  ],
+  [
+    "commerce",
+    "couponEnabled",
+    "chk_coupon_enabled — İndirim kodu alanı",
+    "checkbox",
+  ],
   ["commerce", "pageSize", "num_page_size — Katalog sayfa boyutu", "number", 1],
-  ["commerce", "inventoryGate", "chk_inventory_gate — Stok kontrolü (kapatılamaz)", "checkbox"],
+  [
+    "commerce",
+    "inventoryGate",
+    "chk_inventory_gate — Stok kontrolü (kapatılamaz)",
+    "checkbox",
+  ],
   ["commerce", "lowStockThreshold", "Kritik stok bildirim eşiği", "number", 1],
-  ["analytics", "abandonmentHours", "num_abandonment_hours — Sepet terk penceresi (saat)", "number", 1],
-  ["analytics", "eventRetentionDays", "num_event_retention_days — Ham olay saklama (gün)", "number", 1],
-  ["analytics", "optionalAnalytics", "chk_optional_analytics — İsteğe bağlı analitik", "checkbox"],
-  ["analytics", "reportTimezone", "cmb_report_timezone — Rapor saat dilimi", "select"],
+  [
+    "analytics",
+    "abandonmentHours",
+    "num_abandonment_hours — Sepet terk penceresi (saat)",
+    "number",
+    1,
+  ],
+  [
+    "analytics",
+    "eventRetentionDays",
+    "num_event_retention_days — Ham olay saklama (gün)",
+    "number",
+    1,
+  ],
+  [
+    "analytics",
+    "optionalAnalytics",
+    "chk_optional_analytics — İsteğe bağlı analitik",
+    "checkbox",
+  ],
+  [
+    "analytics",
+    "reportTimezone",
+    "cmb_report_timezone — Rapor saat dilimi",
+    "select",
+  ],
   ["preview", "enabled", "chk_preview_enabled — “Bahçede Gör”", "checkbox"],
-  ["preview", "maxPhotoMb", "num_max_photo_mb — Fotoğraf üst boyutu (MB)", "number", 1],
-  ["preview", "loadTargetSec", "num_preview_load_sec — Yükleme hedefi (sn)", "number", 1],
-  ["preview", "saveLayoutEnabled", "chk_save_layout_enabled — Yerleşimi kaydetme", "checkbox"],
+  [
+    "preview",
+    "maxPhotoMb",
+    "num_max_photo_mb — Fotoğraf üst boyutu (MB)",
+    "number",
+    1,
+  ],
+  [
+    "preview",
+    "loadTargetSec",
+    "num_preview_load_sec — Yükleme hedefi (sn)",
+    "number",
+    1,
+  ],
+  [
+    "preview",
+    "saveLayoutEnabled",
+    "chk_save_layout_enabled — Yerleşimi kaydetme",
+    "checkbox",
+  ],
 ];
 function Settings({ api, notify, refresh }) {
   const [s, setS] = useState(null),
@@ -587,10 +685,19 @@ function Settings({ api, notify, refresh }) {
           for (const [g, k, , type] of FIELDS) {
             const el = form.elements[`${g}.${k}`];
             body[g][k] =
-              type === "checkbox" ? el.checked : type === "number" ? Number(el.value) : el.value;
+              type === "checkbox"
+                ? el.checked
+                : type === "number"
+                  ? Number(el.value)
+                  : el.value;
           }
           try {
-            setS(await api("/api/admin/settings", { method: "PUT", body: JSON.stringify(body) }));
+            setS(
+              await api("/api/admin/settings", {
+                method: "PUT",
+                body: JSON.stringify(body),
+              }),
+            );
             refresh();
             notify("Ayarlar kaydedildi");
           } catch (err) {
@@ -601,30 +708,45 @@ function Settings({ api, notify, refresh }) {
         {["commerce", "analytics", "preview"].map((g) => (
           <fieldset key={g}>
             <legend>
-              {{ commerce: "Ürün ve sipariş (param_commerce)", analytics: "Analitik (param_analytics)", preview: "3D önizleme (param_preview)" }[g]}
+              {
+                {
+                  commerce: "Ürün ve sipariş (param_commerce)",
+                  analytics: "Analitik (param_analytics)",
+                  preview: "3D önizleme (param_preview)",
+                }[g]
+              }
             </legend>
-            {FIELDS.filter((f) => f[0] === g).map(([, k, label, type, step]) => (
-              <label key={k} className={type === "checkbox" ? "check" : ""}>
-                {type === "checkbox" && (
-                  <input
-                    type="checkbox"
-                    name={`${g}.${k}`}
-                    defaultChecked={s[g][k]}
-                    disabled={k === "inventoryGate"}
-                  />
-                )}
-                {label}
-                {type === "number" && (
-                  <input type="number" name={`${g}.${k}`} min="0" step={step} defaultValue={s[g][k]} required />
-                )}
-                {type === "select" && (
-                  <select name={`${g}.${k}`} defaultValue={s[g][k]}>
-                    <option value="Europe/Istanbul">Europe/Istanbul</option>
-                    <option value="UTC">UTC</option>
-                  </select>
-                )}
-              </label>
-            ))}
+            {FIELDS.filter((f) => f[0] === g).map(
+              ([, k, label, type, step]) => (
+                <label key={k} className={type === "checkbox" ? "check" : ""}>
+                  {type === "checkbox" && (
+                    <input
+                      type="checkbox"
+                      name={`${g}.${k}`}
+                      defaultChecked={s[g][k]}
+                      disabled={k === "inventoryGate"}
+                    />
+                  )}
+                  {label}
+                  {type === "number" && (
+                    <input
+                      type="number"
+                      name={`${g}.${k}`}
+                      min="0"
+                      step={step}
+                      defaultValue={s[g][k]}
+                      required
+                    />
+                  )}
+                  {type === "select" && (
+                    <select name={`${g}.${k}`} defaultValue={s[g][k]}>
+                      <option value="Europe/Istanbul">Europe/Istanbul</option>
+                      <option value="UTC">UTC</option>
+                    </select>
+                  )}
+                </label>
+              ),
+            )}
           </fieldset>
         ))}
         <button className="primary">Ayarları kaydet</button>
@@ -716,7 +838,11 @@ function Audit({ api, notify }) {
   }, []);
   if (!rows) return <p>Yükleniyor…</p>;
   const show = (v) =>
-    v === undefined || v === null ? "—" : typeof v === "object" ? JSON.stringify(v) : String(v);
+    v === undefined || v === null
+      ? "—"
+      : typeof v === "object"
+        ? JSON.stringify(v)
+        : String(v);
   return (
     <div className="table-scroll">
       <table className="audit">

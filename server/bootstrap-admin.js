@@ -23,9 +23,7 @@ export async function bootstrapAdmin({ email, password } = {}) {
     );
   }
   if (await User.exists({ role: "admin" }))
-    throw Error(
-      "İlk admin zaten var. Yeni roller yönetim panelinden atanmalı",
-    );
+    throw Error("İlk admin zaten var. Yeni roller yönetim panelinden atanmalı");
   await User.create({
     name: "Proje Yöneticisi",
     email: normalized,

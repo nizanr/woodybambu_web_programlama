@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback, lazy, Suspense } from "react";
+import React, { useEffect, useState, lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import {
   api,
@@ -13,105 +13,13 @@ const Admin = lazy(() => import("./Admin"));
 import "@fontsource-variable/dm-sans";
 import "@fontsource-variable/manrope";
 import "./style.css";
-
-/* ─── Scroll Reveal Hook ─── */
-function useScrollReveal() {
-  useEffect(() => {
-    const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (prefersReduced) {
-      document.querySelectorAll('.reveal, .reveal-left, .reveal-right').forEach(el => el.classList.add('visible'));
-      return;
-    }
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach(entry => {
-        if (entry.isIntersecting) {
-          entry.target.classList.add('visible');
-          observer.unobserve(entry.target);
-        }
-      });
-    }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
-    const targets = document.querySelectorAll('.reveal, .reveal-left, .reveal-right');
-    targets.forEach(el => observer.observe(el));
-    return () => observer.disconnect();
-  });
-}
-
-/* ─── Parallax Hook ─── */
-function useParallax() {
-  useEffect(() => {
-    const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (prefersReduced) return;
-    const hero = document.querySelector('.hero-image');
-    if (!hero) return;
-    let ticking = false;
-    const onScroll = () => {
-      if (!ticking) {
-        ticking = true;
-        requestAnimationFrame(() => {
-          const scrollY = window.scrollY;
-          hero.style.transform = `scale(1.03) translateY(${scrollY * 0.25}px)`;
-          ticking = false;
-        });
-      }
-    };
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
-  });
-}
-
-/* ─── Navbar Scroll Hook ─── */
-function useNavbarScroll() {
-  useEffect(() => {
-    const navbar = document.querySelector('.navbar');
-    if (!navbar) return;
-    let ticking = false;
-    const onScroll = () => {
-      if (!ticking) {
-        ticking = true;
-        requestAnimationFrame(() => {
-          if (window.scrollY > 60) {
-            navbar.classList.add('scrolled');
-          } else {
-            navbar.classList.remove('scrolled');
-          }
-          ticking = false;
-        });
-      }
-    };
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
-  });
-}
-
-/* ─── Live Visitor Count Hook (SSE) ─── */
-function useVisitorCount() {
-  const [count, setCount] = useState(0);
-  useEffect(() => {
-    let es;
-    try {
-      es = new EventSource('/api/visitors/stream');
-      es.onmessage = (e) => {
-        try {
-          const data = JSON.parse(e.data);
-          if (Number.isInteger(data.count)) setCount(data.count);
-        } catch {}
-      };
-      es.onerror = () => {
-        es.close();
-        // fallback: poll once
-        fetch('/api/visitors/count').then(r => r.json()).then(d => {
-          if (Number.isInteger(d.count)) setCount(d.count);
-        }).catch(() => {});
-      };
-    } catch {
-      fetch('/api/visitors/count').then(r => r.json()).then(d => {
-        if (Number.isInteger(d.count)) setCount(d.count);
-      }).catch(() => {});
-    }
-    return () => es?.close();
-  }, []);
-  return count;
-}
+import {
+  useScrollReveal,
+  useParallax,
+  useNavbarScroll,
+  useVisitorCount,
+} from "./hooks.js";
+import AddressForm from "./AddressForm.jsx";
 
 function App() {
   const [products, setProducts] = useState([]),
@@ -179,15 +87,24 @@ function App() {
     [coupon, setCoupon] = useState(""),
     [visible, setVisible] = useState(8),
     [afterLogin, setAfterLogin] = useState(null);
-  const notify = (s) => { setToastHiding(false); setToast(s); };
+  const notify = (s) => {
+    setToastHiding(false);
+    setToast(s);
+  };
   const isBuyer = ["customer", "admin"].includes(user?.role);
   const previewOn = settings?.preview.enabled !== false;
   const refreshProducts = () =>
-    api("/api/products").then(setProducts).catch(() => {});
+    api("/api/products")
+      .then(setProducts)
+      .catch(() => {});
   const loadCart = async (code = coupon) => {
     if (!isBuyer) return setCart({ items: [], summary: null });
     try {
-      setCart(await api("/api/cart" + (code ? "?coupon=" + encodeURIComponent(code) : "")));
+      setCart(
+        await api(
+          "/api/cart" + (code ? "?coupon=" + encodeURIComponent(code) : ""),
+        ),
+      );
     } catch {}
   };
   const loadAddresses = () =>
@@ -198,7 +115,9 @@ function App() {
       })
       .catch(() => {});
   const loadNotifications = () =>
-    api("/api/notifications").then(setNotifications).catch(() => {});
+    api("/api/notifications")
+      .then(setNotifications)
+      .catch(() => {});
   useEffect(() => {
     if (!user) {
       setCart({ items: [], summary: null });
@@ -231,7 +150,9 @@ function App() {
       body: JSON.stringify({
         eventType: "product_view",
         productId: p._id,
-        ...(globalThis.crypto?.randomUUID ? { eventId: crypto.randomUUID() } : {}),
+        ...(globalThis.crypto?.randomUUID
+          ? { eventId: crypto.randomUUID() }
+          : {}),
       }),
     }).catch(() => {});
   };
@@ -253,7 +174,9 @@ function App() {
   const add = async (p) => {
     if (!user) {
       notify(
-        modal === "studio" ? VAL.VAL019 : "Sepete eklemek için giriş yapın veya üye olun.",
+        modal === "studio"
+          ? VAL.VAL019
+          : "Sepete eklemek için giriş yapın veya üye olun.",
       );
       if (modal === "studio") setAfterLogin("studio");
       setModal("login");
@@ -317,7 +240,9 @@ function App() {
       api("/api/orders/" + id + "/pay", { method: "POST" })
         .then(() => {
           notify("Ödeme doğrulandı. Siparişlerinizden takip edebilirsiniz.");
-          api("/api/cart").then(setCart).catch(() => {});
+          api("/api/cart")
+            .then(setCart)
+            .catch(() => {});
           refreshProducts();
           history.replaceState({}, "", "/");
         })
@@ -327,7 +252,10 @@ function App() {
     if (toast) {
       const t = setTimeout(() => {
         setToastHiding(true);
-        setTimeout(() => { setToast(""); setToastHiding(false); }, 350);
+        setTimeout(() => {
+          setToast("");
+          setToastHiding(false);
+        }, 350);
       }, 4650);
       return () => clearTimeout(t);
     }
@@ -354,7 +282,7 @@ function App() {
   if (sort === "high") shown.sort((a, b) => b.price - a.price);
   const collection = () => {
     setPage("home");
-    setPageKey(k => k + 1);
+    setPageKey((k) => k + 1);
     setTimeout(
       () =>
         document
@@ -447,8 +375,12 @@ function App() {
             notify={notify}
             refresh={() => {
               refreshProducts();
-              api("/api/settings/public").then(setSettings).catch(() => {});
-              api("/api/categories").then(setCategories).catch(() => {});
+              api("/api/settings/public")
+                .then(setSettings)
+                .catch(() => {});
+              api("/api/categories")
+                .then(setCategories)
+                .catch(() => {});
             }}
           />
         </Suspense>
@@ -636,7 +568,11 @@ function App() {
                   <div className="product-meta">
                     <small>{p.category.toLocaleUpperCase("tr")}</small>
                     <span className={"stock-label" + (p.stock ? "" : " out")}>
-                      {!p.stock ? "Tükendi" : p.stock <= 3 ? `Son ${p.stock} ürün` : "Stokta"}
+                      {!p.stock
+                        ? "Tükendi"
+                        : p.stock <= 3
+                          ? `Son ${p.stock} ürün`
+                          : "Stokta"}
                     </span>
                     <h3>
                       <button
@@ -665,7 +601,9 @@ function App() {
             {shown.length > visible && (
               <button
                 className="secondary load-more"
-                onClick={() => setVisible((v) => v + (settings?.commerce.pageSize || 8))}
+                onClick={() =>
+                  setVisible((v) => v + (settings?.commerce.pageSize || 8))
+                }
               >
                 Daha fazla ürün göster ({shown.length - visible})
               </button>
@@ -766,7 +704,16 @@ function App() {
       {toast && (
         <div className={"toast" + (toastHiding ? " hiding" : "")} role="status">
           {toast}
-          <button onClick={() => { setToastHiding(true); setTimeout(() => { setToast(""); setToastHiding(false); }, 350); }} aria-label="Bildirimi kapat">
+          <button
+            onClick={() => {
+              setToastHiding(true);
+              setTimeout(() => {
+                setToast("");
+                setToastHiding(false);
+              }, 350);
+            }}
+            aria-label="Bildirimi kapat"
+          >
             ×
           </button>
         </div>
@@ -895,7 +842,9 @@ function App() {
               <>
                 <h2>Merhaba, {user.name}</h2>
                 <p>{user.email}</p>
-                <span className="badge">{ROLE_LABELS[user.role] || user.role}</span>
+                <span className="badge">
+                  {ROLE_LABELS[user.role] || user.role}
+                </span>
                 <div className="account-actions">
                   <button className="primary" onClick={openOrders}>
                     Siparişlerim
@@ -925,7 +874,10 @@ function App() {
                           <button
                             className="text-btn"
                             onClick={async () => {
-                              await api("/api/notifications/" + n._id + "/read", { method: "POST" }).catch(() => {});
+                              await api(
+                                "/api/notifications/" + n._id + "/read",
+                                { method: "POST" },
+                              ).catch(() => {});
                               loadNotifications();
                             }}
                           >
@@ -949,7 +901,9 @@ function App() {
                       className="text-btn"
                       onClick={async () => {
                         try {
-                          await api("/api/addresses/" + a._id, { method: "DELETE" });
+                          await api("/api/addresses/" + a._id, {
+                            method: "DELETE",
+                          });
                           loadAddresses();
                         } catch (e) {
                           notify(e.message);
@@ -964,7 +918,10 @@ function App() {
                   <summary>+ Yeni adres ekle</summary>
                   <AddressForm
                     onSave={async (body) => {
-                      await api("/api/addresses", { method: "POST", body: JSON.stringify(body) });
+                      await api("/api/addresses", {
+                        method: "POST",
+                        body: JSON.stringify(body),
+                      });
                       loadAddresses();
                       notify("Adres kaydedildi");
                     }}
@@ -978,7 +935,8 @@ function App() {
                       checked={consent === true}
                       onChange={(e) => saveConsent(e.target.checked)}
                     />
-                    Ürün deneyimini iyileştirmek için anonim davranış ölçümüne izin veriyorum
+                    Ürün deneyimini iyileştirmek için anonim davranış ölçümüne
+                    izin veriyorum
                   </label>
                 )}
                 <button
@@ -1011,7 +969,9 @@ function App() {
                     : selected.stock > 0
                       ? `${selected.stock} adet stokta`
                       : "Tükendi"}
-                  {previewOn && selected.model3dUrl && " · Temsili 3D model ile önizleme"}
+                  {previewOn &&
+                    selected.model3dUrl &&
+                    " · Temsili 3D model ile önizleme"}
                 </p>
                 <button
                   className="primary"
@@ -1020,14 +980,16 @@ function App() {
                 >
                   Sepete ekle
                 </button>
-                {previewOn && selected.model3dUrl && selected.isActive !== false && (
-                  <button
-                    className="secondary"
-                    onClick={() => openStudio(selected)}
-                  >
-                    ◈ Bahçede Gör
-                  </button>
-                )}
+                {previewOn &&
+                  selected.model3dUrl &&
+                  selected.isActive !== false && (
+                    <button
+                      className="secondary"
+                      onClick={() => openStudio(selected)}
+                    >
+                      ◈ Bahçede Gör
+                    </button>
+                  )}
               </>
             )}
             {modal === "cart" && (
@@ -1038,8 +1000,13 @@ function App() {
                 </h2>
                 {!user ? (
                   <>
-                    <p className="empty">Sepet oluşturmak için giriş yapın veya üye olun.</p>
-                    <button className="primary" onClick={() => setModal("login")}>
+                    <p className="empty">
+                      Sepet oluşturmak için giriş yapın veya üye olun.
+                    </p>
+                    <button
+                      className="primary"
+                      onClick={() => setModal("login")}
+                    >
                       Giriş yap
                     </button>
                   </>
@@ -1061,7 +1028,9 @@ function App() {
                           <strong>{i.name}</strong>
                           <p>
                             {money(i.price)}
-                            {!i.isActive && <em className="warn"> · {VAL.VAL004}</em>}
+                            {!i.isActive && (
+                              <em className="warn"> · {VAL.VAL004}</em>
+                            )}
                           </p>
                           <div className="quantity">
                             <button
@@ -1078,7 +1047,9 @@ function App() {
                             >
                               +
                             </button>
-                            <button onClick={() => removeLine(i)}>Kaldır</button>
+                            <button onClick={() => removeLine(i)}>
+                              Kaldır
+                            </button>
                           </div>
                         </div>
                       </div>
@@ -1095,7 +1066,9 @@ function App() {
                           İndirim kodu
                           <input
                             value={coupon}
-                            onChange={(e) => setCoupon(e.target.value.toUpperCase())}
+                            onChange={(e) =>
+                              setCoupon(e.target.value.toUpperCase())
+                            }
                             maxLength="20"
                           />
                         </label>
@@ -1115,12 +1088,17 @@ function App() {
                         </>
                       )}
                       <dt>Kargo</dt>
-                      <dd>{cart.summary?.shipping ? money(cart.summary.shipping) : "Ücretsiz"}</dd>
+                      <dd>
+                        {cart.summary?.shipping
+                          ? money(cart.summary.shipping)
+                          : "Ücretsiz"}
+                      </dd>
                       <dt className="total">Genel toplam</dt>
                       <dd className="total">{money(cart.summary?.total)}</dd>
                     </dl>
                     <p className="muted">
-                      Tutar sunucuda hesaplanır; ödeme öncesinde stok ve fiyat yeniden doğrulanır.
+                      Tutar sunucuda hesaplanır; ödeme öncesinde stok ve fiyat
+                      yeniden doğrulanır.
                     </p>
                     <div className="payment-note">
                       {payment?.label || "Ödeme bilgisi yükleniyor…"}
@@ -1128,7 +1106,9 @@ function App() {
                         " · Sandbox test bilgileri kullanılır. Gerçek kart veya kimlik bilgisi girmeyin."}
                     </div>
                     {!["customer", "admin"].includes(user.role) ? (
-                      <p className="warn">Yönetici hesabıyla sipariş verilemez.</p>
+                      <p className="warn">
+                        Yönetici hesabıyla sipariş verilemez.
+                      </p>
                     ) : (
                       <form
                         onSubmit={async (e) => {
@@ -1143,7 +1123,8 @@ function App() {
                                 ...(addressId && addressId !== "new"
                                   ? { addressId }
                                   : { address: f.get("address") }),
-                                acceptTerms: f.get("ch_distance_sales") === "on",
+                                acceptTerms:
+                                  f.get("ch_distance_sales") === "on",
                                 couponCode: cart.summary?.couponCode,
                               }),
                             });
@@ -1198,9 +1179,13 @@ function App() {
                         )}
                         <label className="check">
                           <input type="checkbox" name="ch_distance_sales" />
-                          Ön bilgilendirme formunu ve mesafeli satış sözleşmesini okudum, onaylıyorum.
+                          Ön bilgilendirme formunu ve mesafeli satış
+                          sözleşmesini okudum, onaylıyorum.
                         </label>
-                        <button className="primary" disabled={busy || !cart.items.length}>
+                        <button
+                          className="primary"
+                          disabled={busy || !cart.items.length}
+                        >
                           {busy
                             ? "İşleniyor…"
                             : payment?.provider === "iyzico"
@@ -1223,7 +1208,9 @@ function App() {
                     <div className="order" key={o._id}>
                       <div>
                         <strong>#{o._id.slice(-8).toUpperCase()}</strong>
-                        <span className="badge">{STATUS_LABELS[o.status] || o.status}</span>
+                        <span className="badge">
+                          {STATUS_LABELS[o.status] || o.status}
+                        </span>
                       </div>
                       <p>
                         {o.items
@@ -1282,48 +1269,6 @@ function App() {
         </div>
       )}
     </>
-  );
-}
-function AddressForm({ onSave, notify }) {
-  const [busy, setBusy] = useState(false);
-  return (
-    <form
-      className="admin-form"
-      onSubmit={async (e) => {
-        e.preventDefault();
-        setBusy(true);
-        try {
-          await onSave(Object.fromEntries(new FormData(e.target)));
-          e.target.reset();
-        } catch (err) {
-          notify(err.message);
-        } finally {
-          setBusy(false);
-        }
-      }}
-    >
-      <label>
-        Adres başlığı
-        <input name="title" maxLength="40" placeholder="Ev, iş…" />
-      </label>
-      <label>
-        Ad soyad
-        <input name="fullName" required maxLength="80" autoComplete="name" />
-      </label>
-      <label>
-        İl
-        <input name="city" required maxLength="40" autoComplete="address-level1" />
-      </label>
-      <label>
-        İlçe
-        <input name="district" required maxLength="40" autoComplete="address-level2" />
-      </label>
-      <label>
-        Açık adres
-        <textarea name="line" required minLength="10" maxLength="300" autoComplete="street-address" />
-      </label>
-      <button className="primary" disabled={busy}>Adresi kaydet</button>
-    </form>
   );
 }
 createRoot(document.getElementById("root")).render(<App />);

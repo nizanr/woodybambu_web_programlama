@@ -5,7 +5,10 @@ import { VAL, money } from "./util.js";
 /* Temsili Three.js modeli (builtin:<tip>) */
 function buildBuiltin(type, color) {
   const group = new THREE.Group();
-  const wood = new THREE.MeshStandardMaterial({ color: color || "#b79b77", roughness: 0.85 }),
+  const wood = new THREE.MeshStandardMaterial({
+      color: color || "#b79b77",
+      roughness: 0.85,
+    }),
     fabric = new THREE.MeshStandardMaterial({ color: "#eee6d9", roughness: 1 });
   const box = (w, h, d, x, y, z, mat = wood) => {
     const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
@@ -19,23 +22,29 @@ function buildBuiltin(type, color) {
     d = lounger ? 2.5 : table ? 1.6 : 1.15;
   box(w, 0.15, d, 0, 0, 0);
   for (const x of [-w / 2 + 0.12, w / 2 - 0.12])
-    for (const z of [-d / 2 + 0.12, d / 2 - 0.12]) box(0.12, 0.8, 0.12, x, -0.45, z);
+    for (const z of [-d / 2 + 0.12, d / 2 - 0.12])
+      box(0.12, 0.8, 0.12, x, -0.45, z);
   if (!table) {
     box(w - 0.12, 0.2, d - 0.12, 0, 0.16, 0, fabric);
     box(w, 0.85, 0.12, 0, 0.5, -d / 2);
     box(w - 0.15, 0.65, 0.17, 0, 0.5, -d / 2 + 0.1, fabric);
     for (const x of [-w / 2, w / 2]) box(0.12, 0.45, d, x, 0.3, 0);
     if (sofa)
-      for (const x of [-0.82, 0, 0.82]) box(0.76, 0.15, 0.94, x, 0.29, 0.02, fabric);
+      for (const x of [-0.82, 0, 0.82])
+        box(0.76, 0.15, 0.94, x, 0.29, 0.02, fabric);
   }
   return group;
 }
 /* Harici GLB/GLTF modeli; boyutu sahneye sığacak şekilde normalize edilir. */
 async function loadGltf(url, timeoutMs) {
-  const { GLTFLoader } = await import("three/examples/jsm/loaders/GLTFLoader.js");
+  const { GLTFLoader } = await import(
+    "three/examples/jsm/loaders/GLTFLoader.js"
+  );
   const gltf = await Promise.race([
     new GLTFLoader().loadAsync(url),
-    new Promise((_, reject) => setTimeout(() => reject(Error("timeout")), timeoutMs)),
+    new Promise((_, reject) =>
+      setTimeout(() => reject(Error("timeout")), timeoutMs),
+    ),
   ]);
   const model = gltf.scene;
   const box = new THREE.Box3().setFromObject(model);
@@ -76,8 +85,14 @@ export default function Studio({
     sceneRef = useRef(null),
     modelRef = useRef(null),
     fileRef = useRef(null);
-  const preview = settings?.preview || { maxPhotoMb: 8, loadTargetSec: 5, saveLayoutEnabled: true };
-  const candidates = products.filter((p) => p.model3dUrl && p.isActive !== false);
+  const preview = settings?.preview || {
+    maxPhotoMb: 8,
+    loadTargetSec: 5,
+    saveLayoutEnabled: true,
+  };
+  const candidates = products.filter(
+    (p) => p.model3dUrl && p.isActive !== false,
+  );
   const [product, setProduct] = useState(initial),
     [photo, setPhoto] = useState(null),
     [scale, setScale] = useState(1),
@@ -89,7 +104,8 @@ export default function Studio({
     [status, setStatus] = useState("loading"),
     [loadMs, setLoadMs] = useState(null),
     [busy, setBusy] = useState(false);
-  const canSave = preview.saveLayoutEnabled && ["customer", "admin"].includes(user?.role);
+  const canSave =
+    preview.saveLayoutEnabled && ["customer", "admin"].includes(user?.role);
   const canBuy = !user || ["customer", "admin"].includes(user.role);
 
   useEffect(() => {
@@ -169,7 +185,10 @@ export default function Studio({
       try {
         model = info.model3dUrl.startsWith("builtin:")
           ? buildBuiltin(info.model3dUrl.slice(8), info.color)
-          : await loadGltf(info.model3dUrl, Math.max(preview.loadTargetSec, 1) * 2000);
+          : await loadGltf(
+              info.model3dUrl,
+              Math.max(preview.loadTargetSec, 1) * 2000,
+            );
       } catch {
         if (!cancelled) {
           setStatus("unavailable");
@@ -208,7 +227,8 @@ export default function Studio({
   );
 
   const usePhotoFile = async (file) => {
-    if (!["image/jpeg", "image/png"].includes(file.type)) return notify(VAL.VAL016);
+    if (!["image/jpeg", "image/png"].includes(file.type))
+      return notify(VAL.VAL016);
     if (file.size > preview.maxPhotoMb * 1024 * 1024) return notify(VAL.VAL017);
     const url = URL.createObjectURL(file);
     if (!(await readable(url))) {
@@ -264,14 +284,20 @@ export default function Studio({
       const dist = Math.hypot(b.x - a.x, b.y - a.y);
       const angle = Math.atan2(b.y - a.y, b.x - a.x);
       setScale(clamp(+(g.scale * (dist / (g.dist || 1))).toFixed(2), 0.2, 3));
-      setRotation(Math.round((((g.rotation + ((angle - g.angle) * 180) / Math.PI) % 360) + 360) % 360));
+      setRotation(
+        Math.round(
+          (((g.rotation + ((angle - g.angle) * 180) / Math.PI) % 360) + 360) %
+            360,
+        ),
+      );
     }
   };
   const onPointerEnd = (e) => {
     pointers.current.delete(e.pointerId);
     snapshot();
   };
-  const onWheel = (e) => setScale((s) => clamp(+(s - e.deltaY * 0.001).toFixed(2), 0.2, 3));
+  const onWheel = (e) =>
+    setScale((s) => clamp(+(s - e.deltaY * 0.001).toFixed(2), 0.2, 3));
   const onKeyDown = (e) => {
     const step = e.shiftKey ? 0.5 : 0.1;
     const moves = {
@@ -376,7 +402,9 @@ export default function Studio({
             className="scene"
             tabIndex={0}
             aria-label="Önizleme alanı. Ok tuşlarıyla mobilyayı taşıyabilirsiniz."
-            style={{ backgroundImage: `url(${photo?.url || "/images/garden-hero.png"})` }}
+            style={{
+              backgroundImage: `url(${photo?.url || "/images/garden-hero.png"})`,
+            }}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerEnd}
@@ -391,15 +419,21 @@ export default function Studio({
             }}
           >
             <div ref={host} className="canvas-host" />
-            {status === "loading" && <span className="scene-status">3D model yükleniyor…</span>}
-            {status === "unavailable" && <span className="scene-status">{VAL.VAL018}</span>}
+            {status === "loading" && (
+              <span className="scene-status">3D model yükleniyor…</span>
+            )}
+            {status === "unavailable" && (
+              <span className="scene-status">{VAL.VAL018}</span>
+            )}
             {status === "nowebgl" && (
               <span className="scene-status">
-                Tarayıcınız 3D görüntülemeyi desteklemiyor. Ürünü yine de sepete ekleyebilirsiniz.
+                Tarayıcınız 3D görüntülemeyi desteklemiyor. Ürünü yine de sepete
+                ekleyebilirsiniz.
               </span>
             )}
             <span className="scene-note">
-              Sürükleyerek taşıyın · iki parmakla büyütün/döndürün · tekerlekle ölçekleyin
+              Sürükleyerek taşıyın · iki parmakla büyütün/döndürün · tekerlekle
+              ölçekleyin
             </span>
           </div>
           <aside>
@@ -407,7 +441,9 @@ export default function Studio({
               Ürün
               <select
                 value={product._id}
-                onChange={(e) => setProduct(candidates.find((p) => p._id === e.target.value))}
+                onChange={(e) =>
+                  setProduct(candidates.find((p) => p._id === e.target.value))
+                }
               >
                 {candidates.map((p) => (
                   <option key={p._id} value={p._id}>
@@ -418,7 +454,9 @@ export default function Studio({
             </label>
             <p className="studio-price">
               <strong>{money(product.price)}</strong> ·{" "}
-              {product.stock > 0 ? `${product.stock} adet stokta` : "Stokta yok"}
+              {product.stock > 0
+                ? `${product.stock} adet stokta`
+                : "Stokta yok"}
             </p>
             <p className="representative">
               Önizleme fotoğraf tabanlı ve temsilidir; yüzey, ölçü veya ışık
@@ -479,7 +517,11 @@ export default function Studio({
               <>
                 <label>
                   Tasarım adı
-                  <input value={name} maxLength="80" onChange={(e) => setName(e.target.value)} />
+                  <input
+                    value={name}
+                    maxLength="80"
+                    onChange={(e) => setName(e.target.value)}
+                  />
                 </label>
                 <label className="check">
                   <input
@@ -490,7 +532,11 @@ export default function Studio({
                   />
                   Bahçe fotoğrafını da hesabıma kaydet
                 </label>
-                <button className="secondary" disabled={busy || !name.trim()} onClick={saveLayout}>
+                <button
+                  className="secondary"
+                  disabled={busy || !name.trim()}
+                  onClick={saveLayout}
+                >
                   Yerleşimimi kaydet
                 </button>
               </>
@@ -516,8 +562,11 @@ export default function Studio({
               </div>
             ))}
             {loadMs !== null && (
-              <small className={loadMs > preview.loadTargetSec * 1000 ? "warn" : ""}>
-                Model yükleme süresi: {(loadMs / 1000).toFixed(1)} sn (hedef ≤ {preview.loadTargetSec} sn)
+              <small
+                className={loadMs > preview.loadTargetSec * 1000 ? "warn" : ""}
+              >
+                Model yükleme süresi: {(loadMs / 1000).toFixed(1)} sn (hedef ≤{" "}
+                {preview.loadTargetSec} sn)
               </small>
             )}
             <small>

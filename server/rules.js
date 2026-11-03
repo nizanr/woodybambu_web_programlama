@@ -16,10 +16,12 @@ export const MSG = {
   VAL014: "Bu sipariş için seçilen durum geçişine izin verilmiyor.",
   VAL015: "Analitik izni olmadığı için olay kaydedilmedi.",
   VAL016: "Lütfen JPEG veya PNG biçiminde bir fotoğraf yükleyiniz.",
-  VAL017: "Fotoğraf yüklenemedi; dosya boyutu sınırı aşıldı veya dosya okunamadı.",
+  VAL017:
+    "Fotoğraf yüklenemedi; dosya boyutu sınırı aşıldı veya dosya okunamadı.",
   VAL018: "Bu ürün için 3D önizleme şu anda kullanılamıyor.",
   // VAL-019: önizleme herkese açık; kaydetme/satın alma hesap ister.
-  VAL019: "Yerleşimi kaydetmek veya satın almak için hesap oluşturup giriş yapınız.",
+  VAL019:
+    "Yerleşimi kaydetmek veya satın almak için hesap oluşturup giriş yapınız.",
   VAL020: "Kayıtlı yerleşim bulunamadı.",
 };
 
@@ -111,7 +113,8 @@ export function priceSummary(lines, commerce, coupon) {
   const freeShip =
     commerce.freeShipThreshold > 0 &&
     subtotalK >= toKurus(commerce.freeShipThreshold);
-  const shippingK = !lines.length || freeShip ? 0 : toKurus(commerce.shippingFee);
+  const shippingK =
+    !lines.length || freeShip ? 0 : toKurus(commerce.shippingFee);
   return {
     subtotal: fromKurus(subtotalK),
     discount: fromKurus(discountK),

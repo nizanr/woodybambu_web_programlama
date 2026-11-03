@@ -13,7 +13,7 @@ Test adları `tests/api.test.js` (API) ve `tests/browser.spec.js` (tarayıcı) i
 | Yönetici  | `manager`    | Ürün/kategori/3D model/stok, sipariş durumu, toplu raporlar |
 | Admin     | `admin`      | Tüm yetkiler + rol, parametre, denetim kaydı |
 
-Eski kayıtlar sunucu açılışında bir kez dönüştürülür: `user→customer`, `admin→manager`, `superadmin→admin` (`migrate()` — `server/app.js`).
+Eski kayıtlar sunucu açılışında bir kez dönüştürülür: `user→customer`, `admin→manager`, `superadmin→admin` (`migrate()` — `server/seed.js`).
 
 ## Fonksiyonel gereksinimler
 

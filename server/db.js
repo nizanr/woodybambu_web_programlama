@@ -8,7 +8,9 @@ export async function connectDB() {
     return uri;
   } catch (err) {
     if (process.env.NODE_ENV !== "production") {
-      console.log("Yerel MongoDB bulunamadı, bellek içi (in-memory) MongoDB başlatılıyor...");
+      console.log(
+        "Yerel MongoDB bulunamadı, bellek içi (in-memory) MongoDB başlatılıyor...",
+      );
       const { MongoMemoryServer } = await import("mongodb-memory-server");
       const mongod = await MongoMemoryServer.create();
       uri = mongod.getUri();

@@ -51,7 +51,8 @@ export const VAL = {
   VAL017:
     "Fotoğraf yüklenemedi; dosya boyutu sınırı aşıldı veya dosya okunamadı.",
   VAL018: "Bu ürün için 3D önizleme şu anda kullanılamıyor.",
-  VAL019: "Yerleşimi kaydetmek veya satın almak için hesap oluşturup giriş yapınız.",
+  VAL019:
+    "Yerleşimi kaydetmek veya satın almak için hesap oluşturup giriş yapınız.",
 };
 export const istanbulDate = (d) =>
   new Date(d).toLocaleString("tr-TR", { timeZone: "Europe/Istanbul" });
