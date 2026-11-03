@@ -17,22 +17,22 @@ export async function bootstrapAdmin({ email, password } = {}) {
   const normalized = email.trim().toLowerCase();
   const existing = await User.findOne({ email: normalized });
   if (existing) {
-    if (existing.role === "superadmin") return;
+    if (existing.role === "admin") return;
     throw Error(
       "Admin kurulumu mevcut kullanıcı hesabını değiştirmez; farklı e-posta kullanın",
     );
   }
-  if (await User.exists({ role: "superadmin" }))
+  if (await User.exists({ role: "admin" }))
     throw Error(
-      "İlk süper admin zaten var. Yeni roller yönetim panelinden atanmalı",
+      "İlk admin zaten var. Yeni roller yönetim panelinden atanmalı",
     );
   await User.create({
     name: "Proje Yöneticisi",
     email: normalized,
     password: await bcrypt.hash(password, 12),
-    role: "superadmin",
+    role: "admin",
   });
   console.log(
-    "İlk süper admin hesabı oluşturuldu. Bootstrap değişkenlerini ortam ayarlarından kaldırabilirsiniz.",
+    "İlk admin hesabı oluşturuldu. Bootstrap değişkenlerini ortam ayarlarından kaldırabilirsiniz.",
   );
 }

@@ -1,17 +1,19 @@
 # Doğrulama sonuçları
 
-- API entegrasyonu: 31 test geçti. Gerçek MongoDB, oturum, rol sınırları, stok rezervasyonu/iadesi, kullanıcı izolasyonu ve tasarım kayıtları denetlendi.
-- iyzico adaptörü: taklit sağlayıcıyla başarısız ödeme, tutar uyuşmazlığı, başarılı ödeme ve başlatma hatasında stok iadesi denetlendi. Canlı sandbox servisi bu testlerde çağrılmadı.
-- Tarayıcı: katalog/filtre/sepet ve mobil taşma; WebGL 3D çizim ve dönüş testleri geçti. Üyelik, JPEG/PNG fotoğraf seçme, yerleşim kaydı ve demo sipariş tamamlama testi de geçti. Toplam 3 tarayıcı testi.
-- React üretim derlemesi başarılı.
+Son otomatik yürütme: 03.11.2026 (SRS eklemelerinden sonra). Test adlarındaki `TC-xx` kimlikleri SRS 6. bölümdeki senaryolardır.
 
-**Yürütülmeyen kontroller:** Gerçek iyzico sandbox checkout (anahtarlar yok), tüm manuel 100 senaryo, gerçek mobil cihazlarda 5 saniye performans ölçümü, canlı dağıtım.
+- API entegrasyonu (`npm test`): 55 API + 6 ilk admin kurulum testi, toplam **61 test geçti**. Bellek içi MongoDB kullanıldı.
+  - Kapsanan SRS senaryoları: TC-01…TC-28, TC-30, TC-31 API düzeyinde; ayrıca VAL-001/002/005/006/009/010/013/015, FR-008/016/018/025/026, BR-T02 ve rol geçişi (migrate) testleri.
+  - iyzico adaptörü taklit sağlayıcıyla denetlendi: başarısız ödeme (VAL-007), taklit dönüş adresi, tutar uyuşmazlığı (VAL-008), tekrarlı callback, başarılı ödeme ve başlatma hatası. Canlı sandbox servisi çağrılmadı.
+- Tarayıcı (`npx playwright test`): **3 test geçti** — katalog filtresi/stok etiketi, ziyaretçinin sepette girişe yönlendirilmesi, ziyaretçinin 3D önizlemeyi kullanıp kaydetmede girişe yönlendirilmesi (TC-31, güncellenmiş kural), 390 px mobil taşma, üyelik, WebGL çizim, döndürme, geçersiz dosya reddi (VAL-016), fotoğraf yükleme (TC-23), fotoğrafı koruyarak ürün değiştirme (FR-030), fotoğraflı yerleşim kaydı (TC-28), önizlemeden sepete ekleme (TC-27), sözleşme onayı olmadan ödeme reddi (TC-21) ve demo sipariş tamamlama.
+- React üretim derlemesi (`npm run build`) başarılı.
+
+**Yürütülmeyen kontroller:** TC-29 (gerçek cihazlarda 5 sn performans ölçümü; stüdyo ölçülen süreyi gösterir), NFR-02 yük testi, gerçek iyzico sandbox checkout (anahtarlar yok), tam WCAG 2.1 AA denetimi, NFR-08 yedekten geri yükleme testi, tüm manuel 100 senaryo, canlı dağıtım.
 
 Bu dosya bir hata bulgusu listesi değildir. Manuel test planındaki bekleyen durumlar otomatik olarak geçti sayılmaz.
 
 ## Yayın hazırlığı kontrolleri
 
-- İlk süper admin kurulumu: 6 test geçti; mevcut müşteriler yükseltilmiyor, şifre yeniden başlatmada değişmiyor. API testleriyle toplam 37 otomatik test başarılı.
+- İlk admin kurulumu: mevcut üyeler yükseltilmiyor, şifre yeniden başlatmada değişmiyor.
 - Üretim modunda HTTPS proxy arkasında Secure/HttpOnly oturum çerezi, Render kaynak adresi ve güçlü oturum anahtarı gereksinimi denetlendi.
-- Üretim sunucusu yerel olarak başlatıldı; ana sayfanın derlenmiş JS dosyaları, ürün API, veritabanı sağlık kontrolü ve bahçe görseli HTTP istekleriyle doğrulandı.
 - Render/Atlas üzerinde canlı deployment henüz yapılmadı; hosting hesapları ve Atlas bağlantısı gerekiyor.

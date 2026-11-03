@@ -1553,3 +1553,239 @@ td select {
     transform: none !important;
   }
 }
+
+/* ─── SRS eklemeleri: stok etiketi, sepet özeti, izin bandı, bildirimler ─── */
+.stock-label {
+  display: inline-block;
+  margin-left: 8px;
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  color: var(--green);
+  background: #ecefe4;
+  padding: 2px 8px;
+  border-radius: 20px;
+}
+.stock-label.out {
+  color: #8a3b2e;
+  background: #f4e4df;
+}
+.load-more {
+  display: block;
+  margin: 30px auto 0;
+}
+.warn {
+  color: #8a3b2e;
+}
+.form-error {
+  color: #8a3b2e;
+  font-size: 13px;
+}
+.summary {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px 16px;
+  margin: 20px 0 8px;
+  font-size: 14px;
+}
+.summary dt,
+.summary dd {
+  margin: 0;
+}
+.summary dd {
+  text-align: right;
+}
+.summary .total {
+  font-weight: 700;
+  font-size: 16px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+.coupon {
+  display: flex;
+  gap: 10px;
+  align-items: end;
+  flex-wrap: wrap;
+  margin-top: 15px;
+}
+.coupon label {
+  flex: 1;
+  min-width: 140px;
+}
+label.check {
+  display: flex !important;
+  gap: 10px;
+  align-items: flex-start;
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 12px 0;
+}
+label.check input {
+  width: auto !important;
+  display: inline-block !important;
+  margin: 2px 0 0 !important;
+  flex: none;
+}
+.consent {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: 16px;
+  z-index: 90;
+  max-width: 720px;
+  margin: 0 auto;
+  background: #faf9f6;
+  border: 1px solid var(--line);
+  box-shadow: 0 10px 30px #0002;
+  border-radius: 8px;
+  padding: 18px 20px;
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+.consent p {
+  flex: 1 1 320px;
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+.consent div {
+  display: flex;
+  gap: 10px;
+}
+.account-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 15px 0;
+}
+.modal h3 {
+  margin-top: 25px;
+  font-size: 15px;
+}
+.notifications {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  font-size: 12px;
+}
+.notifications li {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  gap: 4px;
+}
+.notifications li.unread span {
+  font-weight: 600;
+}
+.notifications small {
+  color: var(--muted);
+}
+.address-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px solid var(--line);
+  padding: 8px 0;
+  font-size: 12px;
+}
+.address-row p {
+  margin: 4px 0 0;
+  color: var(--muted);
+}
+.address-form summary {
+  cursor: pointer;
+  font-size: 13px;
+  margin: 12px 0;
+}
+.modal .admin-form {
+  grid-template-columns: 1fr;
+}
+.modal .admin-form input,
+.modal .admin-form textarea {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+}
+.scene:focus-visible {
+  outline: 3px solid #9aa18e;
+  outline-offset: 2px;
+}
+.scene-status {
+  position: absolute;
+  top: 15px;
+  left: 15px;
+  right: 15px;
+  background: #faf9f6e6;
+  padding: 10px 12px;
+  border-radius: 5px;
+  font-size: 12px;
+  pointer-events: none;
+}
+.studio aside select {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  padding: 8px;
+}
+.studio-price {
+  font-size: 13px !important;
+}
+.representative {
+  background: #ecefe4;
+  padding: 10px;
+  border-radius: 5px;
+  line-height: 1.5;
+}
+.saved-row {
+  display: flex;
+  align-items: center;
+}
+.saved-row .saved {
+  flex: 1;
+}
+.admin .stats.kpis {
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+}
+.admin td.warn {
+  font-weight: 700;
+}
+.button-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  align-self: end;
+}
+.settings-form {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+.settings-form fieldset {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 15px;
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+.settings-form legend {
+  font-weight: 600;
+  font-size: 13px;
+  padding: 0 6px;
+}
+.audit code {
+  font-size: 10px;
+  word-break: break-all;
+}
+@media (max-width: 760px) {
+  .admin .stats,
+  .admin-form {
+    grid-template-columns: 1fr;
+  }
+  .consent {
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+  }
+}

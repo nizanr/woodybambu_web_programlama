@@ -14,8 +14,8 @@ await User.create({
   name: "Proje Yöneticisi",
   email,
   password: await bcrypt.hash(process.env.ADMIN_PASSWORD, 12),
-  role: "superadmin",
+  role: "admin",
 });
-console.log("Süper admin oluşturuldu");
+console.log("Admin oluşturuldu");
 await mongoose.disconnect();
 process.exit(0);

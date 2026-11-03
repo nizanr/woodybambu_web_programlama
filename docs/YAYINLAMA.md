@@ -30,7 +30,7 @@ Render ücretsiz servisleri boşta kaldığında uyuyabilir; ilk açılış yava
 
 `APP_URL` Render üzerinde varsayılan olarak otomatik `RENDER_EXTERNAL_URL` değerinden alınır. Özel alan adı kullanıyorsanız `APP_URL` alanına tam HTTPS adresinizi, sonunda `/` olmadan yazın.
 
-## 3. İlk süper admin
+## 3. İlk admin
 
 Render servisinin Environment bölümüne geçici olarak şunları ekleyin ve yeniden deploy edin:
 
@@ -39,7 +39,7 @@ Render servisinin Environment bölümüne geçici olarak şunları ekleyin ve ye
 | `ADMIN_EMAIL`    | Daha önce sitede kaydolmamış, sizin kullandığınız e-posta |
 | `ADMIN_PASSWORD` | Sizin belirlediğiniz 12–128 karakterli güçlü şifre        |
 
-Hesap ilk başlangıçta şifre hash'lenerek oluşturulur. Siteye bu hesapla giriş yapıp Hesabım → Yönetim paneli üzerinden kontrol edin. Ardından **iki bootstrap değişkenini Render'dan silin ve yeniden deploy edin**; veritabanındaki hesap silinmez. Mevcut kullanıcıların rolü veya şifresi bu mekanizmayla değiştirilmez; başka adminler panelden atanır.
+Hesap ilk başlangıçta şifre hash'lenerek oluşturulur. Siteye bu hesapla giriş yapıp Hesabım → Yönetim paneli üzerinden kontrol edin. Ardından **iki bootstrap değişkenini Render'dan silin ve yeniden deploy edin**; veritabanındaki hesap silinmez. Mevcut kullanıcıların rolü veya şifresi bu mekanizmayla değiştirilmez; başka yönetici/admin hesapları panelden (Kullanıcılar sekmesi) atanır.
 
 ## 4. iyzico sandbox (isteğe bağlı)
 
@@ -55,5 +55,16 @@ Başarılı ve reddedilen test ödemelerini sağlayıcının resmi test kartlar�
 - Demo sipariş ve yönetim paneli çalışıyor mu?
 - Kullanıcı rolüyle admin API'si engelleniyor mu?
 - Yeniden deployment sonrası kullanıcı ve sipariş kayıtları korunuyor mu?
+- Yönetim paneli → Ayarlar ekranında kargo, ücretsiz kargo eşiği, olay saklama süresi ve fotoğraf boyutu iş sahibinin onayladığı değerlerle girildi mi (SRS DEC-02/04/08)?
+
+## 6. Yedekleme ve geri yükleme (NFR-08)
+
+1. Atlas → Cluster → **Backup** bölümünden ücretli planlarda bulut yedeğini açın; ücretsiz M0 kümede otomatik yedek yoktur, bu durumda yerel makinede düzenli `mongodump` alın:
+   `mongodump --uri "$MONGODB_URI" --out ./yedek-$(date +%F)`
+2. Geri yükleme testini **ayrı, boş bir test veritabanına** yapın, canlı veritabanının üzerine yazmayın:
+   `mongorestore --uri "<test-veritabanı-uri>" --nsFrom 'bahceni.*' --nsTo 'bahceni_restore.*' ./yedek-YYYY-AA-GG`
+3. Geri yüklenen veritabanında kullanıcı, sipariş, ödeme ve `auditlogs` sayılarını kaynakla karşılaştırın; sonucu `docs/TEST_SONUCLARI.md` dosyasına tarih ve kanıtla yazın.
+
+Yedek dosyaları kişisel veri içerir; depoya eklemeyin ve erişimi kısıtlı bir yerde saklayın.
 
 Depoya dosya eklemek veya Render yapılandırması hazırlamak, başarılı canlı yayın kanıtı değildir. Yayın durumu Render logları ve dış HTTPS adresinden yapılan işlev kontrolleriyle doğrulanmalıdır.
