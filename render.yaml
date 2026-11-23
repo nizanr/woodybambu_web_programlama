@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: bahceni-tasarla
+    name: woody-bambu
     runtime: node
     plan: free
     buildCommand: npm ci --include=dev && npm run build
