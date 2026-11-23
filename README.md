@@ -74,3 +74,7 @@ Görsel kaynakları: ana bahçe görseli bu proje için AI ile üretildi; ürün
 ## İnternette yayınlama
 
 [Render + MongoDB Atlas yayınlama rehberi](docs/YAYINLAMA.md) ve `render.yaml` hazır. Render otomatik oturum anahtarı üretir; sizin yalnızca kendi Atlas bağlantı dizesini güvenli panelde girmeniz gerekir. Hosting hesabı/bağlantısı olmadan bu depo kendiliğinden yayınlanmaz.
+
+## Canlı adres
+
+Uygulama Render üzerinde `woody-bambu` servisi olarak yayınlanır: https://woody-bambu.onrender.com (ücretsiz plan boşta uyur; ilk açılış 50 sn kadar sürebilir).
