@@ -30,6 +30,8 @@ Tarayıcı testleri varsayılan olarak `/usr/bin/chromium` kullanır; farklı yo
 - Adres defteri, mesafeli satış sözleşmesi onayı, sistem içi bildirimler ve kendi sipariş geçmişi.
 - Yönetici: ürün/kategori/3D model/stok yönetimi, sırayla ilerleyen sipariş durumları (Ödendi → Hazırlanıyor → Kargolandı → Teslim Edildi), ürün etkileşim ve sepet terk raporları, CSV dışa aktarma.
 - Admin: rol yönetimi, kargo/indirim/analitik/3D önizleme parametreleri, indirim kodları ve denetim kaydı.
+- Hesabım: şifre değiştirme (mevcut şifre sorulur, oturum yenilenir), favori ürünler (♡), sipariş iptali (kargoya verilmeden önce) ve teslimden sonraki 14 gün içinde iade talebi; talepler yönetici onayıyla sonuçlanır, onaylanınca stok geri eklenir.
+- Balkon önerisinde takımı tek tıkla sepete ekleme ve takımı aynı bahçe fotoğrafında görme; stüdyoda aynı fotoğrafa 12 parçaya kadar mobilya yerleştirme.
 - İzin tabanlı davranış analitiği (product_view, add_to_cart, remove_from_cart, checkout_start, purchase); izin verilmezse olay kaydedilmez.
 - “Bahçede Gör” ziyaretçi dahil herkese açıktır; yerleşimi kaydetmek ve sepete eklemek için giriş gerekir. Three.js ile temsili model veya HTTPS GLB/GLTF dosyası; JPEG/PNG bahçe fotoğrafında fare/dokunmatik ile sürükleme, döndürme ve boyutlandırma; fotoğrafı yeniden yüklemeden başka ürün deneme ve önizlemeden sepete ekleme. Fotoğraf yalnızca kullanıcı “hesabıma kaydet” derse sunucuya gider; olaylara ve loglara hiçbir zaman yazılmaz.
 
@@ -56,6 +58,20 @@ Sandbox örneği sabit test telefon/kimlik ve şehir verisi kullanır; gerçek k
 Ödeme başarılı sayfasına dönmek tek başına ödeme kanıtı değildir: API sağlayıcıdan `paymentStatus` ve tutarı kontrol eder. Giriş oturumunun korunmadığı dönüşte tekrar giriş yapıp Siparişlerim → Ödeme durumunu doğrula seçeneğini kullanın.
 
 Sandbox anahtarları sağlanmadığı için sağlayıcıyla uçtan uca ödeme henüz doğrulanmadı. Bu bir ders projesi test entegrasyonudur; canlı ödeme kullanımına hazır olduğu iddia edilmez. Stok, SRS BR-005 gereği ödeme başlatılırken yalnızca kontrol edilir ve sağlayıcı doğrulamasından sonra düşer. Aynı son ürün için iki ödeme aynı anda doğrulanırsa ikincisi `stock_conflict` (iade gerekli) olarak işaretlenir ve yöneticilere bildirim düşer; iade/mutabakat akışı canlı kullanım öncesi ayrıca geliştirilmelidir.
+
+## E-posta bildirimi (SMTP)
+
+SMTP ortam değişkenleri tanımlıysa kullanıcıya giden bildirimler (sipariş alındı, durum değişti, iptal/iade sonucu, şifre değişikliği) e-postayla da gönderilir; tanımlı değilse yalnızca site içi bildirim çalışır. Ek paket gerekmez (`server/mail.js`).
+
+| Değişken | Örnek (Gmail) |
+| -------- | ------------- |
+| `SMTP_HOST` | `smtp.gmail.com` |
+| `SMTP_PORT` | `465` (doğrudan TLS) veya `587` (STARTTLS) |
+| `SMTP_USER` | Gmail adresi |
+| `SMTP_PASS` | Google hesabında 2 adımlı doğrulama açıp oluşturulan **Uygulama şifresi** |
+| `MAIL_FROM` | Gönderen adres (boşsa `SMTP_USER`) |
+
+Değerleri yalnızca `.env` dosyasına veya Render → Environment ekranına girin; Git'e ve sohbete yazmayın. Şifreli bağlantı sunmayan sunucuya kimlik bilgisi gönderilmez. Not: Render ücretsiz planı giden SMTP bağlantılarını kısıtlayabilir; e-posta gelmezse loglarda `mail:` satırına bakın.
 
 ## Mimari ve ders teslimleri
 
