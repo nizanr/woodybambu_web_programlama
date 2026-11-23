@@ -37,6 +37,8 @@ const userSchema = new mongoose.Schema(
     password: String,
     role: { type: String, enum: ROLES, default: "customer" },
     addresses: [addressSchema],
+    // FR-035: favori ürünler (en fazla 100).
+    favorites: { type: [ObjectId], default: [] },
   },
   { timestamps: true },
 );
@@ -119,6 +121,10 @@ export const ORDER_STATUSES = [
   "delivered",
   "cancelled",
   "stock_conflict",
+  // FR-036: iptal/iade talepleri ve sonucu
+  "cancel_requested",
+  "return_requested",
+  "returned",
 ];
 export const Order = mongoose.model(
   "Order",
@@ -138,6 +144,19 @@ export const Order = mongoose.model(
       settingsVersion: Number,
       stockApplied: { type: Boolean, default: false },
       analyticsSid: String,
+      deliveredAt: Date,
+      // FR-036: son iptal/iade talebi ve sonucu
+      request: {
+        type: { type: String, enum: ["cancel", "return"] },
+        reason: String,
+        prevStatus: String,
+        requestedAt: Date,
+        decision: { type: String, enum: ["approved", "rejected"] },
+        note: String,
+        decidedAt: Date,
+      },
+      // Ücret iadesi: demo siparişte gerekmez; iyzico'da yönetici panelinden ayrıca yapılır.
+      refundStatus: { type: String, enum: ["not_required", "manual_pending", "done"] },
     },
     { timestamps: true },
   ),
@@ -197,6 +216,16 @@ export const Design = mongoose.model(
       y: Number,
       scale: Number,
       rotation: Number,
+      // FR-029: aynı fotoğrafta birden fazla mobilya (ilk öğe üstteki alanlarla aynıdır).
+      items: {
+        type: [
+          new mongoose.Schema(
+            { productId: String, x: Number, y: Number, scale: Number, rotation: Number },
+            { _id: false },
+          ),
+        ],
+        default: undefined,
+      },
       photoRef: { type: String, default: null },
     },
     { timestamps: true },

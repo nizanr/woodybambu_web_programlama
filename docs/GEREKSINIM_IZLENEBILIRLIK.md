@@ -22,7 +22,7 @@ Eski kayıtlar sunucu açılışında bir kez dönüştürülür: `user→custom
 | FR-001 | `GET /api/products` yalnızca `status: published`; stok etiketi ve `num_page_size` ile sayfalama (`main.jsx`) | TC-01 |
 | FR-002 | `?q=` / `?category=` filtreleri; arayüzde boş durum mesajı | TC-01 |
 | FR-003 | `GET /api/products/:id`: taslak 404, pasif ürün görünür ama `isActive:false` | TC-02 |
-| FR-004 | Kayıt/giriş, bcrypt özeti, benzersiz e-posta | TC-03, VAL-001 |
+| FR-004 | Kayıt/giriş, bcrypt özeti, benzersiz e-posta; `POST /api/account/password` ile şifre değiştirme (mevcut şifre, VAL-022/023, oturum yenilenir) | TC-03, VAL-001, TC-33 |
 | FR-005 | `POST /api/cart/items` sunucuda stok/durum kontrolü | TC-04 |
 | FR-006 | `PATCH /api/cart/items/:id`, ara/genel toplam yeniden hesaplanır | TC-05 |
 | FR-007 | `DELETE /api/cart/items/:id`; boş sepette ödeme düğmesi pasif | TC-07 |
@@ -41,18 +41,20 @@ Eski kayıtlar sunucu açılışında bir kez dönüştürülür: `user→custom
 | FR-020 | `GET /api/reports/summary` ürün bazında metrikler | TC-16 |
 | FR-021 | Sepet terk oranı (BR-013) | TC-17 |
 | FR-022 | Raporlar yönetici/admin; denetim yalnızca admin | TC-19 |
-| FR-023 | `notifications` koleksiyonu; ödeme, durum, yeni sipariş, kritik stok, stok çakışması | bildirim testi |
+| FR-023 | `notifications` koleksiyonu; ödeme, durum, yeni sipariş, kritik stok, stok çakışması, iptal/iade, şifre değişikliği; SMTP tanımlıysa kullanıcıya e-posta (`server/mail.js`) | bildirim testi, `tests/mail.test.js` |
 | FR-024 | `PUT /api/admin/settings` (yalnızca admin) | TC-22 |
 | FR-025 | `GET /api/reports/summary.csv` yalnızca toplu veri | FR-025 testi |
 | FR-026 | Sağlayıcı hatasında anlaşılır mesaj; belirsiz sonuç `VAL-008`, başarılı sayılmaz | FR-026 testi |
 | FR-027 | “Bahçede Gör” ziyaretçi dahil herkese açık; kaydetme/sepet giriş ister (VAL-019); JPEG/PNG + boyut + okunabilirlik | TC-23, TC-24, TC-31 |
 | FR-028 | `model3dUrl`: `builtin:*` temsili model veya HTTPS GLB/GLTF; yoksa VAL-018 | TC-25, TC-26 |
-| FR-029 | Fare sürükleme, tekerlek ölçek, dokunmatik tek parmak taşıma, iki parmak ölçek/döndürme, ok tuşları | TC-25 |
+| FR-029 | Fare sürükleme, tekerlek ölçek, dokunmatik tek parmak taşıma, iki parmak ölçek/döndürme, ok tuşları; aynı fotoğrafta 12 parçaya kadar mobilya (dokunarak seçim), `items` ile kayıt | TC-25, çoklu yerleşim testi |
 | FR-030 | Stüdyoda ürün seçici; fotoğraf korunur | tarayıcı testi |
 | FR-031 | Stüdyoda “Satın al · Sepete ekle” → FR-005 | TC-27 |
 | FR-032 | `/api/designs` kaydet/listele/aç/sil, yalnızca sahibine | TC-28 |
 | FR-033 | Fotoğraf yalnızca istenirse `DesignPhoto`'ya; olay/log/rapora girmez | TC-30 |
 | FR-034 | `GET /api/recommend?width&depth` (`server/balcony.js`); anasayfada “Balkonuna ne sığar?” bölümü (`src/Balcony.jsx`), kuşbakışı plan, “Bahçede Gör” bağlantısı | TC-32, `tests/balcony.test.js` |
+| FR-035 | Favoriler: `GET/PUT/DELETE /api/favorites`, ürün kartında ♡, Hesabım → Favorilerim | TC-34 |
+| FR-036 | İptal/iade talebi `POST /api/orders/:id/request`; yönetici kararı `POST /api/admin/orders/:id/request`; onayda stok geri eklenir, iyzico siparişinde ücret iadesi elle | TC-35, TC-36 |
 
 ## İş kuralları
 
@@ -83,12 +85,14 @@ Eski kayıtlar sunucu açılışında bir kez dönüştürülür: `user→custom
 | BR-023 | Stüdyodan sepete ekleme aynı `/api/cart/items` ucunu kullanır |
 | BR-024 | *(SRS güncellemesi gerekir)* Önizleme herkese açık; `/api/designs*` ve `/api/cart*` sunucuda oturum ister |
 | BR-025 | Ürün ölçüleri `widthCm/depthCm/heightCm` (boşsa türe göre `DEFAULT_SIZES`); en az bir kenarda 60 cm yürüme payı; takımda her parçanın stoğu yeterli olmalı |
+| BR-026 | Favori listesi kullanıcıya özeldir, en fazla 100 ürün; taslak ürün listelenmez |
+| BR-027 | İptal yalnızca `paid/demo_paid/preparing` durumunda; iade teslimden (`deliveredAt`) sonraki 14 gün içinde; talep yönetici onayıyla sonuçlanır, ret önceki duruma döndürür |
 | BR-T01 | `settings.version` her güncellemede artar; sipariş oluşturulduğu sürümü saklar |
 | BR-T02 | Ayarlar yalnızca admin; önce/sonra değerleriyle `settings_update` kaydı |
 
 ## Validasyonlar
 
-Tüm mesajlar `server/rules.js` → `MSG` içinde SRS metniyle birebir tutulur (VAL-001 … VAL-021). İstisna: VAL-019 artık “Yerleşimi kaydetmek veya satın almak için hesap oluşturup giriş yapınız.” (önizleme herkese açıldı).
+Tüm mesajlar `server/rules.js` → `MSG` içinde SRS metniyle birebir tutulur (VAL-001 … VAL-025; VAL-022…025 şifre değiştirme ve iptal/iade için eklendi). İstisna: VAL-019 artık “Yerleşimi kaydetmek veya satın almak için hesap oluşturup giriş yapınız.” (önizleme herkese açıldı).
 
 ## Fonksiyonel olmayan gereksinimler
 
@@ -130,8 +134,8 @@ Ekip kararıyla 3D önizleme ziyaretçilere de açıldı; yerleşimi kaydetme ve
 | ----- | ---------- |
 | DEC-01 | Misafir ödeme yok; sepet ve sipariş için üyelik gerekir |
 | DEC-02 | Kargo 300 TL, 15.000 TL üzeri ücretsiz, kupon kapalı — Ayarlar ekranından değiştirilebilir |
-| DEC-03 | Üye yalnızca ödenmemiş demo siparişini iptal edebilir; iade akışı yok |
+| DEC-03 | Kargodan önce iptal talebi, teslimden sonraki 14 gün içinde iade talebi; yönetici onaylar (FR-036) |
 | DEC-04 | Ham olay saklama 180 gün, açık rıza bandı |
-| DEC-06 | Bildirimler sistem içi; e-posta sağlayıcısı seçilmedi |
+| DEC-06 | Bildirimler sistem içi; SMTP (ör. Gmail uygulama şifresi) tanımlanırsa e-posta da gider |
 | DEC-07 | Fotoğraf yalnızca üye “hesabıma kaydet” derse MongoDB'de, yerleşimle birlikte silinir |
 | DEC-08 | Fotoğraf üst sınırı 8 MB; 3D model `.glb` / `.gltf` (HTTPS) veya temsili yerleşik model |

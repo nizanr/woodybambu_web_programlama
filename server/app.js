@@ -29,7 +29,10 @@ import {
   priceSummary,
   canTransition,
   zonedDayStart,
+  requestError,
+  minPasswordLength,
 } from "./rules.js";
+import { sendMail, mailConfigFromEnv } from "./mail.js";
 import {
   recommend,
   validBalcony,
@@ -138,10 +141,36 @@ export function createApp(uri, { paymentClient } = {}) {
       correlationId: req?.correlationId,
     }).catch((e) => console.error("audit:", e.message));
   /* ─── Bildirimler (SRS 7) ─── */
-  const notifyUser = (recipientId, type, message) =>
-    Notification.create({ recipientId, audience: "user", type, message }).catch(
+  // FR-023 / DEC-06: SMTP tanımlıysa kullanıcı bildirimi e-postayla da gider.
+  // Gönderim yanıtı bekletmez; hata olursa yalnızca kısa bir log yazılır.
+  const mailConfig = mailConfigFromEnv();
+  const MAIL_SUBJECTS = {
+    payment_success: "Siparişiniz alındı",
+    order_status: "Sipariş durumunuz güncellendi",
+    order_request: "İptal / iade talebiniz",
+    security: "Hesap güvenliği bildirimi",
+  };
+  const notifyUser = (recipientId, type, message) => {
+    const created = Notification.create({ recipientId, audience: "user", type, message }).catch(
       () => {},
     );
+    if (mailConfig)
+      User.findById(recipientId)
+        .select("email")
+        .then((u) =>
+          u &&
+          sendMail(
+            {
+              to: u.email,
+              subject: "Woody Bambu · " + (MAIL_SUBJECTS[type] || "Bildirim"),
+              text: `${message}\n\nAyrıntılar için Woody Bambu hesabınıza giriş yapabilirsiniz.`,
+            },
+            mailConfig,
+          ),
+        )
+        .catch((e) => console.error("mail:", e.message));
+    return created;
+  };
   const notifyStaff = (type, message, audience = "staff") =>
     Notification.create({ audience, type, message }).catch(() => {});
   const orderNo = (o) => "#" + String(o._id).slice(-8).toUpperCase();
@@ -294,6 +323,70 @@ export function createApp(uri, { paymentClient } = {}) {
       if (kept.analyticsConsent !== undefined) Object.assign(req.session, kept);
       res.json({ ok: true });
     });
+  });
+
+  /* ─── Şifre değiştirme (FR-004, NFR-01, VAL-022/023) ─── */
+  app.post("/api/account/password", auth, async (req, res) => {
+    const { currentPassword, newPassword } = req.body;
+    const key = "pw:" + req.currentUser.id;
+    const a = attempts.get(key) || { count: 0, time: Date.now() };
+    if (Date.now() - a.time > 600000) Object.assign(a, { count: 0, time: Date.now() });
+    attempts.set(key, a);
+    if (++a.count > 10) return fail(res, 429, "Çok fazla deneme. 10 dakika sonra tekrar deneyin.");
+    if (
+      typeof currentPassword !== "string" ||
+      currentPassword.length > 128 ||
+      !(await bcrypt.compare(currentPassword, req.currentUser.password))
+    ) {
+      await audit(req, "password_change", req.currentUser.id, undefined, undefined, "denied");
+      return fail(res, 400, MSG.VAL022);
+    }
+    const min = minPasswordLength(req.currentUser.role);
+    if (
+      typeof newPassword !== "string" ||
+      newPassword.length < min ||
+      newPassword.length > 128 ||
+      newPassword === currentPassword
+    )
+      return fail(res, 400, MSG.VAL023, { minLength: min });
+    req.currentUser.password = await bcrypt.hash(newPassword, 12);
+    await req.currentUser.save();
+    await audit(req, "password_change", req.currentUser.id);
+    await notifyUser(req.currentUser._id, "security", "Hesabınızın şifresi değiştirildi. Bu işlemi siz yapmadıysanız hemen yöneticiyle iletişime geçin.");
+    // Oturum kimliği yenilenir; kullanıcı açık kalır.
+    const kept = { ...keepAcrossLogin(req), user: req.session.user };
+    await new Promise((resolve, reject) =>
+      req.session.regenerate((e) => (e ? reject(e) : resolve())),
+    );
+    Object.assign(req.session, kept);
+    res.json({ ok: true });
+  });
+
+  /* ─── Favoriler (FR-035) ─── */
+  const favoriteList = async (u) =>
+    Product.find({ _id: { $in: u.favorites || [] }, status: { $ne: "draft" } });
+  app.get("/api/favorites", auth, async (req, res) =>
+    res.json(await favoriteList(req.currentUser)),
+  );
+  app.put("/api/favorites/:productId", auth, async (req, res) => {
+    if (!isId(req.params.productId)) return res.sendStatus(404);
+    if (!(await Product.exists({ _id: req.params.productId, status: { $ne: "draft" } })))
+      return res.sendStatus(404);
+    if ((req.currentUser.favorites || []).length >= 100)
+      return fail(res, 400, "En fazla 100 favori ürün kaydedebilirsiniz");
+    await User.updateOne(
+      { _id: req.currentUser._id },
+      { $addToSet: { favorites: req.params.productId } },
+    );
+    res.json(await favoriteList(await User.findById(req.currentUser._id)));
+  });
+  app.delete("/api/favorites/:productId", auth, async (req, res) => {
+    if (!isId(req.params.productId)) return res.sendStatus(404);
+    await User.updateOne(
+      { _id: req.currentUser._id },
+      { $pull: { favorites: req.params.productId } },
+    );
+    res.json(await favoriteList(await User.findById(req.currentUser._id)));
   });
 
   /* ─── Analitik izin tercihi (BR-015) ─── */
@@ -823,6 +916,42 @@ export function createApp(uri, { paymentClient } = {}) {
     await notifyUser(o.user, "order_status", `${orderNo(o)} siparişinizin durumu: İptal edildi.`);
     res.json(o);
   });
+  /* ─── İptal / iade talebi (FR-036, BR-027, VAL-024/025) ─── */
+  const REQUEST_STATUS = { cancel: "cancel_requested", return: "return_requested" };
+  app.post("/api/orders/:id/request", auth, async (req, res) => {
+    if (!isId(req.params.id)) return res.sendStatus(404);
+    const { type } = req.body;
+    const reason =
+      typeof req.body.reason === "string" ? req.body.reason.trim().slice(0, 300) : "";
+    if (!REQUEST_STATUS[type]) return fail(res, 400, MSG.VAL024);
+    const o = await Order.findOne({ _id: req.params.id, user: req.currentUser._id });
+    if (!o) return res.sendStatus(404);
+    const err = requestError(o, type);
+    if (err) return fail(res, 409, MSG[err]);
+    const updated = await Order.findOneAndUpdate(
+      { _id: o._id, status: o.status },
+      {
+        $set: {
+          status: REQUEST_STATUS[type],
+          request: { type, reason, prevStatus: o.status, requestedAt: new Date() },
+        },
+      },
+      { new: true },
+    );
+    if (!updated) return fail(res, 409, MSG.VAL024);
+    await audit(req, "order_request", o.id, o.status, updated.status);
+    await notifyStaff(
+      "order_request",
+      `${orderNo(o)} için ${type === "cancel" ? "iptal" : "iade"} talebi var${reason ? ": " + reason : "."}`,
+    );
+    await notifyUser(
+      o.user,
+      "order_request",
+      `${orderNo(o)} için ${type === "cancel" ? "iptal" : "iade"} talebiniz alındı; inceleniyor.`,
+    );
+    res.json(updated);
+  });
+
   app.get("/api/orders", auth, async (req, res) =>
     res.json(
       await Order.find({ user: req.currentUser._id }).sort({ createdAt: -1 }),
@@ -854,21 +983,30 @@ export function createApp(uri, { paymentClient } = {}) {
     const s = await getSettings();
     if (!s.preview.enabled || !s.preview.saveLayoutEnabled)
       return fail(res, 403, "Yerleşim kaydetme şu anda kapalı");
-    const { name, productId, x, y, scale, rotation } = req.body;
+    const { name } = req.body;
+    // FR-029: tek ürün (eski biçim) veya en fazla 12 parçalı yerleşim.
+    const pieces = Array.isArray(req.body.items) ? req.body.items : [req.body];
+    const pieceOk = async (i) =>
+      i &&
+      isId(i.productId) &&
+      [i.x, i.y, i.scale, i.rotation].every(Number.isFinite) &&
+      Math.abs(i.x) <= 10 &&
+      Math.abs(i.y) <= 10 &&
+      i.scale >= 0.2 &&
+      i.scale <= 3 &&
+      i.rotation >= 0 &&
+      i.rotation <= 360 &&
+      (await Product.exists({ _id: i.productId, status: "published" }));
     if (
       typeof name !== "string" ||
       !name.trim() ||
-      !isId(productId) ||
-      !(await Product.exists({ _id: productId, status: "published" })) ||
-      ![x, y, scale, rotation].every(Number.isFinite) ||
-      Math.abs(x) > 10 ||
-      Math.abs(y) > 10 ||
-      scale < 0.2 ||
-      scale > 3 ||
-      rotation < 0 ||
-      rotation > 360
+      !pieces.length ||
+      pieces.length > 12 ||
+      !(await Promise.all(pieces.map(pieceOk))).every(Boolean)
     )
       return fail(res, 400, "Geçersiz tasarım");
+    const [first] = pieces;
+    const { productId, x, y, scale, rotation } = first;
     if ((await Design.countDocuments({ user: req.currentUser._id })) >= 50)
       return fail(res, 400, "En fazla 50 yerleşim kaydedebilirsiniz");
     res.json(
@@ -880,6 +1018,16 @@ export function createApp(uri, { paymentClient } = {}) {
         y,
         scale,
         rotation,
+        items:
+          pieces.length > 1
+            ? pieces.map((i) => ({
+                productId: i.productId,
+                x: i.x,
+                y: i.y,
+                scale: i.scale,
+                rotation: i.rotation,
+              }))
+            : undefined,
       }),
     );
   });
@@ -1143,7 +1291,13 @@ export function createApp(uri, { paymentClient } = {}) {
     }
     const updated = await Order.findOneAndUpdate(
       { _id: o._id, status: from },
-      { $set: { status: req.body.status } },
+      {
+        $set: {
+          status: req.body.status,
+          // FR-036: iade süresi teslim anından başlar.
+          ...(req.body.status === "delivered" ? { deliveredAt: new Date() } : {}),
+        },
+      },
       { new: true },
     );
     if (!updated) return fail(res, 409, MSG.VAL014);
@@ -1152,6 +1306,53 @@ export function createApp(uri, { paymentClient } = {}) {
       o.user,
       "order_status",
       `${orderNo(o)} siparişinizin durumu: ${STATUS_TEXT[updated.status]}.`,
+    );
+    res.json(updated);
+  });
+  app.post("/api/admin/orders/:id/request", auth, roles(...STAFF), async (req, res) => {
+    if (!isId(req.params.id)) return res.sendStatus(404);
+    const { decision } = req.body;
+    const note = typeof req.body.note === "string" ? req.body.note.trim().slice(0, 300) : "";
+    if (!["approved", "rejected"].includes(decision)) return fail(res, 400, MSG.VAL014);
+    const o = await Order.findOne({
+      _id: req.params.id,
+      status: { $in: ["cancel_requested", "return_requested"] },
+    });
+    if (!o) return fail(res, 409, MSG.VAL014);
+    const isCancel = o.status === "cancel_requested";
+    const to =
+      decision === "rejected" ? o.request?.prevStatus || (isCancel ? "preparing" : "delivered")
+      : isCancel ? "cancelled" : "returned";
+    const set = {
+      status: to,
+      "request.decision": decision,
+      "request.note": note,
+      "request.decidedAt": new Date(),
+    };
+    if (decision === "approved")
+      set.refundStatus = o.paymentMode === "iyzico" ? "manual_pending" : "not_required";
+    const updated = await Order.findOneAndUpdate({ _id: o._id, status: o.status }, { $set: set }, { new: true });
+    if (!updated) return fail(res, 409, MSG.VAL014);
+    // Onaylanan iptal/iadede düşülmüş stok geri eklenir (BR-027).
+    if (decision === "approved" && o.stockApplied)
+      for (const line of o.items) {
+        const p = await Product.findOneAndUpdate(
+          { _id: line.id },
+          { $inc: { stock: line.quantity } },
+          { new: true },
+        );
+        if (p)
+          await audit(req, "stock_change", line.id, { stock: p.stock - line.quantity }, { stock: p.stock }, "refund:" + o.id);
+      }
+    await audit(req, "order_request_decision", o.id, o.status, to);
+    const what = isCancel ? "iptal" : "iade";
+    await notifyUser(
+      o.user,
+      "order_request",
+      decision === "approved"
+        ? `${orderNo(o)} ${what} talebiniz onaylandı.` +
+            (o.paymentMode === "iyzico" ? " Ücret iadesi ödeme sağlayıcısı üzerinden yapılacaktır." : "")
+        : `${orderNo(o)} ${what} talebiniz reddedildi${note ? ": " + note : "."}`,
     );
     res.json(updated);
   });
@@ -1277,7 +1478,8 @@ export function createApp(uri, { paymentClient } = {}) {
     const cartNoBuy = [...cartSessions].filter((sid) => !purchaseSessions.has(sid)).length;
     const pct = (num, den) => (den ? Math.round((num / den) * 10000) / 100 : null);
     // Satın alma KPI'ı: başarılı ödeme ile eşleşen siparişler (olay değil).
-    const paidStatuses = ["paid", "demo_paid", "preparing", "shipped", "delivered"];
+    // Talep incelenirken sipariş ödenmiş sayılır; iptal/iade onaylanınca düşer.
+    const paidStatuses = ["paid", "demo_paid", "preparing", "shipped", "delivered", "cancel_requested", "return_requested"];
     const orders = await Order.find({
       status: { $in: paidStatuses },
       createdAt: { $gte: start, $lt: end },
@@ -1441,6 +1643,12 @@ export async function migrate() {
       { model3dUrl: "builtin:" + kind, widthCm: { $exists: false } },
       { $set: { widthCm: s.w, depthCm: s.d, heightCm: s.h } },
     );
+  // Örnek ürün görselleri 3B modellerden yeniden üretildi (webp).
+  for (const k of ["sofa", "chair", "table", "lounger"])
+    await products.updateMany(
+      { image: `/images/product-${k}.png` },
+      { $set: { image: `/images/product-${k}.webp` } },
+    );
 }
 export async function seed() {
   for (const name of Object.keys(CATEGORY_MODELS))
@@ -1454,7 +1662,7 @@ export async function seed() {
       categoryId: await cat("Oturma Grupları"),
       price: 24990,
       stock: 12,
-      image: "/images/product-sofa.png",
+      image: "/images/product-sofa.webp",
       description:
         "Doğal ahşabın sıcaklığı, yumuşak minderlerin konforuyla buluşuyor. 4 kişilik takım, açık havada uzun sohbetler için.",
       color: "#b79b77",
@@ -1469,7 +1677,7 @@ export async function seed() {
       categoryId: await cat("Sandalyeler"),
       price: 3490,
       stock: 28,
-      image: "/images/product-chair.png",
+      image: "/images/product-chair.webp",
       description:
         "Hafif, dayanıklı ve zamansız. El örgüsü dokusuyla bahçenizin yeni favorisi.",
       color: "#ae8358",
@@ -1484,7 +1692,7 @@ export async function seed() {
       categoryId: await cat("Masalar"),
       price: 8990,
       stock: 8,
-      image: "/images/product-table.png",
+      image: "/images/product-table.webp",
       description:
         "Altı kişilik geniş yüzey ve masif ahşap tasarım. Güneşli kahvaltılara davet.",
       color: "#98734e",
@@ -1499,7 +1707,7 @@ export async function seed() {
       categoryId: await cat("Şezlonglar"),
       price: 6490,
       stock: 16,
-      image: "/images/product-lounger.png",
+      image: "/images/product-lounger.webp",
       description:
         "Ayarlanabilir sırt desteği ve rahat minder. Kendinize ayırdığınız anlar için.",
       color: "#d0bc95",
