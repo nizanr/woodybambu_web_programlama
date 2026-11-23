@@ -10,6 +10,7 @@ import {
 } from "./util.js";
 const Studio = lazy(() => import("./Studio"));
 const Admin = lazy(() => import("./Admin"));
+import Balcony from "./Balcony.jsx";
 import "@fontsource-variable/dm-sans";
 import "@fontsource-variable/manrope";
 import "./style.css";
@@ -560,6 +561,12 @@ function App() {
               </p>
             </div>
           </section>
+          <Balcony
+            api={api}
+            products={products}
+            onPreview={openStudio}
+            onDetail={openDetail}
+          />
           <section className="collection" id="collection">
             <div className="section-heading reveal">
               <div>
