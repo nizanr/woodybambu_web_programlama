@@ -71,6 +71,10 @@ const productSchema = new mongoose.Schema(
     // "" → 3D model yok; "builtin:<chair|sofa|table|lounger>" → temsili
     // Three.js modeli; https://…/*.glb|gltf → harici model dosyası.
     model3dUrl: { type: String, default: "" },
+    // FR-034: balkon önerisi için ölçüler (cm). Boşsa türe göre varsayılan kullanılır.
+    widthCm: Number,
+    depthCm: Number,
+    heightCm: Number,
   },
   {
     timestamps: true,
