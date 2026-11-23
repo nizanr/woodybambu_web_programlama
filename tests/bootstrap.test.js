@@ -23,6 +23,11 @@ test("invalid bootstrap password is rejected", async () => {
   );
   assert.equal(await User.countDocuments(), 0);
 });
+test("'admin' username still requires a 12+ character password", async () => {
+  for (const password of ["1", "admin", "12345678901"])
+    await assert.rejects(bootstrapAdmin({ email: "admin", password }));
+  assert.equal(await User.countDocuments(), 0);
+});
 test("existing customer cannot be promoted by bootstrap", async () => {
   await User.create({
     name: "Customer",

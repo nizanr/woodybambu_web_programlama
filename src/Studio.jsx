@@ -74,6 +74,7 @@ export default function Studio({
 }) {
   const host = useRef(),
     sceneRef = useRef(null),
+    viewRef = useRef(null),
     modelRef = useRef(null),
     fileRef = useRef(null);
   const preview = settings?.preview || { maxPhotoMb: 8, loadTargetSec: 5, saveLayoutEnabled: true };
@@ -137,6 +138,7 @@ export default function Studio({
     });
     resize.observe(el);
     sceneRef.current = holder;
+    viewRef.current = { renderer, scene, camera };
     return () => {
       cancelAnimationFrame(frame);
       resize.disconnect();
@@ -144,6 +146,7 @@ export default function Studio({
       renderer.dispose();
       renderer.domElement.remove();
       sceneRef.current = null;
+      viewRef.current = null;
     };
   }, []);
 
@@ -286,7 +289,54 @@ export default function Studio({
         x: clamp(p.x + moves[e.key][0], -10, 10),
         y: clamp(p.y + moves[e.key][1], -10, 10),
       }));
+      return;
     }
+    // Klavyeyle döndürme (Q/E) ve ölçekleme (+/−) — NFR-03 klavye erişimi.
+    const turn = { q: -15, e: 15 }[e.key.toLowerCase()];
+    if (turn) {
+      e.preventDefault();
+      setRotation((r) => (((r + turn) % 360) + 360) % 360);
+      return;
+    }
+    const zoom = { "+": 0.1, "=": 0.1, "-": -0.1, _: -0.1 }[e.key];
+    if (zoom) {
+      e.preventDefault();
+      setScale((s) => clamp(+(s + zoom).toFixed(2), 0.2, 3));
+    }
+  };
+
+  /* Önizlemeyi PNG olarak indirme: fotoğraf + 3D model yalnızca tarayıcıda
+     birleştirilir; sunucuya hiçbir şey gönderilmez (FR-033, BR-021). */
+  const downloadImage = async () => {
+    const view = viewRef.current,
+      el = host.current;
+    if (!view || !el || status !== "ready") return;
+    const { width, height } = el.getBoundingClientRect();
+    const ratio = Math.min(devicePixelRatio || 1, 2);
+    const out = document.createElement("canvas");
+    out.width = Math.round(width * ratio);
+    out.height = Math.round(height * ratio);
+    const ctx = out.getContext("2d");
+    const bg = new Image();
+    bg.src = photo?.url || "/images/garden-hero.png";
+    try {
+      await bg.decode();
+      // CSS'teki background-size: cover ile aynı kırpma.
+      const s = Math.max(out.width / bg.naturalWidth, out.height / bg.naturalHeight);
+      const w = bg.naturalWidth * s,
+        h = bg.naturalHeight * s;
+      ctx.drawImage(bg, (out.width - w) / 2, (out.height - h) / 2, w, h);
+    } catch {
+      ctx.fillStyle = "#e9e5dc";
+      ctx.fillRect(0, 0, out.width, out.height);
+    }
+    // WebGL tamponu kare sonunda temizlenir; okumadan hemen önce yeniden çiz.
+    view.renderer.render(view.scene, view.camera);
+    ctx.drawImage(view.renderer.domElement, 0, 0, out.width, out.height);
+    const link = document.createElement("a");
+    link.download = `${(name.trim() || "bahcem").replace(/[^\p{L}\p{N}_-]+/gu, "-")}.png`;
+    link.href = out.toDataURL("image/png");
+    link.click();
   };
 
   const saveLayout = async () => {
@@ -399,7 +449,8 @@ export default function Studio({
               </span>
             )}
             <span className="scene-note">
-              Sürükleyerek taşıyın · iki parmakla büyütün/döndürün · tekerlekle ölçekleyin
+              Sürükleyerek taşıyın · iki parmakla büyütün/döndürün · tekerlekle ölçekleyin ·
+              klavye: oklar, Q/E, +/−
             </span>
           </div>
           <aside>
@@ -465,6 +516,13 @@ export default function Studio({
               }}
             >
               Yerleşimi sıfırla
+            </button>
+            <button
+              className="text-btn"
+              disabled={status !== "ready"}
+              onClick={downloadImage}
+            >
+              Görüntüyü indir (PNG)
             </button>
             {canBuy && (
               <button
