@@ -385,7 +385,7 @@ function App() {
         >
           <span className="brand-symbol">✳</span>
           <span>
-            bahçeni<span className="brand-bottom">tasarla.</span>
+            woody<span className="brand-bottom">bambu.</span>
           </span>
         </a>
         <nav>
@@ -461,7 +461,7 @@ function App() {
             çok daha fazlası.
           </h1>
           <p className="reveal">
-            Bahçeni Tasarla, Nisa Nur Çakır ve Zeynep Ulusoy'un bahçe mobilyası
+            Woody Bambu, Nisa Nur Çakır ve Zeynep Ulusoy'un bahçe mobilyası
             alışverişini bir tasarım deneyimine dönüştüren web programlama
             projesidir.
           </p>
@@ -710,7 +710,7 @@ function App() {
             <a className="brand">
               <span className="brand-symbol">✳</span>
               <span>
-                bahçeni<span className="brand-bottom">tasarla.</span>
+                woody<span className="brand-bottom">bambu.</span>
               </span>
             </a>
             <p>Güzel anlar, açık havada başlar.</p>
@@ -742,7 +742,7 @@ function App() {
           </div>
         </div>
         <div className="footer-bottom">
-          <span>© {new Date().getFullYear()} Bahçeni Tasarla</span>
+          <span>© {new Date().getFullYear()} Woody Bambu</span>
           <span>Web Programlama Projesi · Nisa Nur Çakır & Zeynep Ulusoy</span>
         </div>
       </footer>
