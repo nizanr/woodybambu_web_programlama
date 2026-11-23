@@ -1789,3 +1789,192 @@ label.check input {
     bottom: 12px;
   }
 }
+
+/* ─── Balkon ölçüsüne göre öneri (FR-034) ─── */
+.balcony {
+  padding: 70px 8% 10px;
+  scroll-margin-top: 25px;
+}
+.balcony-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 220px)) auto;
+  gap: 14px 20px;
+  align-items: end;
+}
+.balcony-form label {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.unit-input {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid #b9bdb1;
+}
+.unit-input input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  padding: 10px 4px;
+  font-size: 16px;
+  color: var(--green);
+}
+.unit-input input:focus-visible {
+  outline: 2px solid #9aa18e;
+  outline-offset: 2px;
+}
+.unit-input span {
+  font-size: 12px;
+  color: var(--muted);
+}
+.balcony-form .primary {
+  min-height: 44px;
+  padding: 0 22px;
+}
+.balcony-presets {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.balcony-presets button {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  font-size: 12px;
+  color: var(--green);
+  cursor: pointer;
+}
+.balcony-presets button:hover {
+  border-color: var(--green);
+}
+.balcony-error {
+  grid-column: 1 / -1;
+  margin: 0;
+  min-height: 1em;
+  font-size: 12px;
+  color: #a0412d;
+}
+.balcony-result {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  gap: 30px;
+  margin-top: 20px;
+  align-items: start;
+}
+.balcony-plan {
+  width: 100%;
+  height: auto;
+  max-height: 460px;
+  background: #f1efe8;
+  border-radius: 8px;
+}
+.plan-floor {
+  fill: #fbfaf6;
+}
+.plan-outline {
+  fill: none;
+  stroke: var(--green);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+.plan-piece {
+  fill: #d9c6a3;
+  stroke: #7a6446;
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+.plan-piece.kind-M {
+  fill: #b99a6e;
+}
+.plan-piece.kind-K,
+.plan-piece.kind-Ş {
+  fill: #e7ddc9;
+}
+.plan-label {
+  fill: #3b2f20;
+  font-weight: 600;
+}
+.plan-edge {
+  fill: var(--muted);
+}
+.balcony-list h3 {
+  font-weight: 500;
+  font-size: 16px;
+  margin: 0 0 10px;
+}
+.balcony-list ul {
+  list-style: none;
+  margin: 0 0 22px;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.balcony-option {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+.balcony-option.selected {
+  border-color: var(--green);
+  box-shadow: inset 3px 0 0 var(--green);
+}
+.balcony-pick {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  padding: 12px 14px 6px;
+  cursor: pointer;
+  color: var(--green);
+}
+.balcony-pick strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+.balcony-pick span {
+  font-size: 12px;
+  color: var(--muted);
+}
+.balcony-pick .balcony-meta {
+  color: var(--green);
+}
+.balcony-actions {
+  display: flex;
+  gap: 16px;
+  padding: 0 14px;
+}
+.balcony-actions .text-btn {
+  padding: 8px 0 12px;
+  min-height: 36px;
+}
+.balcony-empty {
+  font-size: 13px;
+  color: var(--muted);
+}
+.balcony-list small {
+  display: block;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+@media (max-width: 760px) {
+  .balcony {
+    padding: 50px 5% 0;
+  }
+  .balcony-form {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .balcony-form .primary {
+    grid-column: 1 / -1;
+  }
+  .balcony-result {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

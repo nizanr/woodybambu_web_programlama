@@ -134,6 +134,8 @@ function Products({ data, editing, setEditing, send }) {
           const f = Object.fromEntries(new FormData(e.target));
           f.price = +f.price;
           f.stock = +f.stock;
+          // Boş ölçü: türe göre varsayılan kullanılır (FR-034).
+          for (const k of ["widthCm", "depthCm", "heightCm"]) f[k] = f[k] === "" ? null : +f[k];
           f.model3dUrl = modelKind === "url" ? f.modelUrl.trim() : modelKind;
           delete f.modelUrl;
           const r = await send(
@@ -228,6 +230,24 @@ function Products({ data, editing, setEditing, send }) {
           Model rengi
           <input name="color" type="color" defaultValue={editing?.color || "#b79b77"} />
         </label>
+        {[
+          ["widthCm", "En (cm)"],
+          ["depthCm", "Derinlik (cm)"],
+          ["heightCm", "Yükseklik (cm)"],
+        ].map(([n, l]) => (
+          <label key={n}>
+            {l} · balkon önerisi
+            <input
+              name={n}
+              type="number"
+              min="10"
+              max="1000"
+              step="1"
+              placeholder="Boşsa türe göre"
+              defaultValue={editing?.[n] ?? ""}
+            />
+          </label>
+        ))}
         <label>
           Açıklama
           <input name="description" maxLength="1000" defaultValue={editing?.description} />

@@ -30,6 +30,12 @@ import {
   canTransition,
   zonedDayStart,
 } from "./rules.js";
+import {
+  recommend,
+  validBalcony,
+  validProductSize,
+  DEFAULT_SIZES,
+} from "./balcony.js";
 
 const isId = (v) => typeof v === "string" && /^[a-f\d]{24}$/.test(v);
 const STAFF = ["manager", "admin"];
@@ -366,6 +372,18 @@ export function createApp(uri, { paymentClient } = {}) {
       price: p.price,
       stock: p.stock,
     });
+  });
+
+  /* ─── Balkon ölçüsüne göre öneri (FR-034, BR-025, VAL-021): herkese açık.
+     Yalnızca yayında ve stokta olan ürünler; fiyatlar sunucudan gelir. ─── */
+  app.get("/api/recommend", async (req, res) => {
+    const width = Number(req.query.width),
+      depth = Number(req.query.depth);
+    if (!validBalcony(width, depth)) return fail(res, 400, MSG.VAL021);
+    const products = await Product.find({ status: "published", stock: { $gt: 0 } }).sort({
+      createdAt: 1,
+    });
+    res.json(recommend(products.map((p) => p.toJSON()), width, depth));
   });
 
   /* ─── İstemci kaynaklı analitik olayı: yalnızca product_view ─── */
@@ -988,7 +1006,8 @@ export function createApp(uri, { paymentClient } = {}) {
       typeof (p.model3dUrl ?? "") !== "string" ||
       !MODEL_URL.test(p.model3dUrl ?? "") ||
       (p.color !== undefined && p.color !== null && !/^#[0-9a-fA-F]{6}$/.test(p.color)) ||
-      (p.description !== undefined && p.description !== null && (typeof p.description !== "string" || p.description.length > 1000))
+      (p.description !== undefined && p.description !== null && (typeof p.description !== "string" || p.description.length > 1000)) ||
+      ![p.widthCm, p.depthCm, p.heightCm].every(validProductSize)
     )
       return MSG.VAL013;
     return null;
@@ -1008,6 +1027,9 @@ export function createApp(uri, { paymentClient } = {}) {
     "description",
     "color",
     "model3dUrl",
+    "widthCm",
+    "depthCm",
+    "heightCm",
   ];
   const pickProduct = (b) =>
     Object.fromEntries(
@@ -1413,6 +1435,12 @@ export async function migrate() {
       { $set: { model3dUrl: model } },
     );
   await products.updateMany({ model3dUrl: { $exists: false } }, { $set: { model3dUrl: "builtin:chair" } });
+  // FR-034: ölçüsü olmayan temsili modelli ürünlere türün varsayılan ölçüsü.
+  for (const [kind, s] of Object.entries(DEFAULT_SIZES))
+    await products.updateMany(
+      { model3dUrl: "builtin:" + kind, widthCm: { $exists: false } },
+      { $set: { widthCm: s.w, depthCm: s.d, heightCm: s.h } },
+    );
 }
 export async function seed() {
   for (const name of Object.keys(CATEGORY_MODELS))
@@ -1431,6 +1459,9 @@ export async function seed() {
         "Doğal ahşabın sıcaklığı, yumuşak minderlerin konforuyla buluşuyor. 4 kişilik takım, açık havada uzun sohbetler için.",
       color: "#b79b77",
       model3dUrl: "builtin:sofa",
+      widthCm: 200,
+      depthCm: 85,
+      heightCm: 80,
     },
     {
       name: "Terra Örgü Sandalye",
@@ -1443,6 +1474,9 @@ export async function seed() {
         "Hafif, dayanıklı ve zamansız. El örgüsü dokusuyla bahçenizin yeni favorisi.",
       color: "#ae8358",
       model3dUrl: "builtin:chair",
+      widthCm: 58,
+      depthCm: 60,
+      heightCm: 85,
     },
     {
       name: "Olive Ahşap Bahçe Masası",
@@ -1455,6 +1489,9 @@ export async function seed() {
         "Altı kişilik geniş yüzey ve masif ahşap tasarım. Güneşli kahvaltılara davet.",
       color: "#98734e",
       model3dUrl: "builtin:table",
+      widthCm: 180,
+      depthCm: 90,
+      heightCm: 75,
     },
     {
       name: "Soleil Şezlong",
@@ -1467,6 +1504,9 @@ export async function seed() {
         "Ayarlanabilir sırt desteği ve rahat minder. Kendinize ayırdığınız anlar için.",
       color: "#d0bc95",
       model3dUrl: "builtin:lounger",
+      widthCm: 70,
+      depthCm: 195,
+      heightCm: 85,
     },
   ]);
 }

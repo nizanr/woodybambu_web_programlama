@@ -21,6 +21,7 @@ export const MSG = {
   // VAL-019: önizleme herkese açık; kaydetme/satın alma hesap ister.
   VAL019: "Yerleşimi kaydetmek veya satın almak için hesap oluşturup giriş yapınız.",
   VAL020: "Kayıtlı yerleşim bulunamadı.",
+  VAL021: "Balkon eni ve derinliği 50–2000 cm arasında tam sayı olmalıdır.",
 };
 
 /* SRS 5 — parametre varsayılanları (onay bekleyenler “önerilen başlangıç kuralı”). */

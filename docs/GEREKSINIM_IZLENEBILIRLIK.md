@@ -52,6 +52,7 @@ Eski kayıtlar sunucu açılışında bir kez dönüştürülür: `user→custom
 | FR-031 | Stüdyoda “Satın al · Sepete ekle” → FR-005 | TC-27 |
 | FR-032 | `/api/designs` kaydet/listele/aç/sil, yalnızca sahibine | TC-28 |
 | FR-033 | Fotoğraf yalnızca istenirse `DesignPhoto`'ya; olay/log/rapora girmez | TC-30 |
+| FR-034 | `GET /api/recommend?width&depth` (`server/balcony.js`); anasayfada “Balkonuna ne sığar?” bölümü (`src/Balcony.jsx`), kuşbakışı plan, “Bahçede Gör” bağlantısı | TC-32, `tests/balcony.test.js` |
 
 ## İş kuralları
 
@@ -81,12 +82,13 @@ Eski kayıtlar sunucu açılışında bir kez dönüştürülür: `user→custom
 | BR-022 | Yerleşim ve fotoğraf uçları sahiplik filtresiyle |
 | BR-023 | Stüdyodan sepete ekleme aynı `/api/cart/items` ucunu kullanır |
 | BR-024 | *(SRS güncellemesi gerekir)* Önizleme herkese açık; `/api/designs*` ve `/api/cart*` sunucuda oturum ister |
+| BR-025 | Ürün ölçüleri `widthCm/depthCm/heightCm` (boşsa türe göre `DEFAULT_SIZES`); en az bir kenarda 60 cm yürüme payı; takımda her parçanın stoğu yeterli olmalı |
 | BR-T01 | `settings.version` her güncellemede artar; sipariş oluşturulduğu sürümü saklar |
 | BR-T02 | Ayarlar yalnızca admin; önce/sonra değerleriyle `settings_update` kaydı |
 
 ## Validasyonlar
 
-Tüm mesajlar `server/rules.js` → `MSG` içinde SRS metniyle birebir tutulur (VAL-001 … VAL-020). İstisna: VAL-019 artık “Yerleşimi kaydetmek veya satın almak için hesap oluşturup giriş yapınız.” (önizleme herkese açıldı).
+Tüm mesajlar `server/rules.js` → `MSG` içinde SRS metniyle birebir tutulur (VAL-001 … VAL-021). İstisna: VAL-019 artık “Yerleşimi kaydetmek veya satın almak için hesap oluşturup giriş yapınız.” (önizleme herkese açıldı).
 
 ## Fonksiyonel olmayan gereksinimler
 
