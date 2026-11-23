@@ -16,4 +16,5 @@ Bu dosya bir hata bulgusu listesi değildir. Manuel test planındaki bekleyen du
 
 - İlk admin kurulumu: mevcut üyeler yükseltilmiyor, şifre yeniden başlatmada değişmiyor.
 - Üretim modunda HTTPS proxy arkasında Secure/HttpOnly oturum çerezi, Render kaynak adresi ve güçlü oturum anahtarı gereksinimi denetlendi.
-- Render/Atlas üzerinde canlı deployment henüz yapılmadı; hosting hesapları ve Atlas bağlantısı gerekiyor.
+- Uygulama Render üzerinde yayında: https://woody-bambu.onrender.com (23.11.2026).
+- 23.11.2026 sonrası değişiklikler (admin kullanıcı adı istisnası, ilk admin şifre kuralı, stüdyo klavye kısayolları ve PNG indirme) için `npm test` ve `npx playwright test` yeniden çalıştırılmalıdır.
