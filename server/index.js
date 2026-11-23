@@ -25,5 +25,5 @@ if (process.env.NODE_ENV === "production") {
 }
 app.listen(process.env.PORT || 3000, "0.0.0.0", (error) => {
   if (error) throw error;
-  console.log("Bahçeni Tasarla hazır, port " + (process.env.PORT || 3000));
+  console.log("Woody Bambu hazır, port " + (process.env.PORT || 3000));
 });
