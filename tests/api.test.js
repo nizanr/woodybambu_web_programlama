@@ -741,3 +741,123 @@ test("TC-32 balcony size recommendation: fitting in-stock products, VAL-021", as
     .expect(400);
   await Product.deleteMany({ _id: { $in: [t._id, out._id] } });
 });
+
+/* ─── FR-004 şifre değiştirme, FR-035 favoriler, FR-036 iptal/iade ─── */
+const newBuyer = async (email) => {
+  const agent = request.agent(app);
+  await agent.post("/api/auth/register").send({ name: "Alıcı", email, password: PASS }).expect(200);
+  return agent;
+};
+// Giriş denemesi sınırına (30/10 dk) takılmamak için tek alıcı paylaşılır.
+let sharedBuyer;
+const buyer = async () => (sharedBuyer ||= await newBuyer("buyer@test.dev"));
+const paidDemoOrder = async (agent, product, quantity = 2) => {
+  await agent.post("/api/cart/items").send({ productId: product.id, quantity }).expect(200);
+  const r = await checkout(agent).expect(200);
+  await agent.post("/api/orders/" + r.body.order._id + "/pay").expect(200);
+  return r.body.order._id;
+};
+
+test("TC-33 password change needs current password; new one works (VAL-022/023)", async () => {
+  const a = await newBuyer("pw@test.dev");
+  let r = await a.post("/api/account/password").send({ currentPassword: "wrong-one", newPassword: "YeniSifre123!" }).expect(400);
+  assert.equal(r.body.error, MSG.VAL022);
+  r = await a.post("/api/account/password").send({ currentPassword: PASS, newPassword: "kisa" }).expect(400);
+  assert.equal(r.body.error, MSG.VAL023);
+  await a.post("/api/account/password").send({ currentPassword: PASS, newPassword: PASS }).expect(400);
+  await a.post("/api/account/password").send({ currentPassword: PASS, newPassword: "YeniSifre123!" }).expect(200);
+  await a.get("/api/me").expect(200);
+  await request(app).post("/api/auth/login").send({ email: "pw@test.dev", password: PASS }).expect(401);
+  await request(app).post("/api/auth/login").send({ email: "pw@test.dev", password: "YeniSifre123!" }).expect(200);
+  assert.ok(await AuditLog.exists({ eventType: "password_change", result: "ok" }));
+  await request(app).post("/api/account/password").send({ currentPassword: PASS, newPassword: "x".repeat(12) }).expect(401);
+});
+
+test("TC-34 favorites are per user and hide drafts", async () => {
+  const a = await newBuyer("fav@test.dev");
+  const b = await newBuyer("fav2@test.dev");
+  let r = await a.put("/api/favorites/" + p.id).expect(200);
+  assert.deepEqual(r.body.map((x) => x._id), [p.id]);
+  await a.put("/api/favorites/" + p.id).expect(200);
+  assert.equal((await a.get("/api/favorites").expect(200)).body.length, 1);
+  assert.equal((await b.get("/api/favorites").expect(200)).body.length, 0);
+  await a.put("/api/favorites/000000000000000000000000").expect(404);
+  r = await a.delete("/api/favorites/" + p.id).expect(200);
+  assert.equal(r.body.length, 0);
+  await request(app).get("/api/favorites").expect(401);
+});
+
+test("TC-35 cancel request before shipping; approval restores stock (VAL-024)", async () => {
+  const a = await buyer();
+  const prod = await Product.create({
+    name: "İptal test ürünü",
+    category: chairs.name,
+    categoryId: chairs._id,
+    price: 100,
+    stock: 5,
+    image: "https://example.com/i.jpg",
+    model3dUrl: "builtin:chair",
+  });
+  const id = await paidDemoOrder(a, prod, 2);
+  assert.equal((await Product.findById(prod._id)).stock, 3);
+  const r = await a.post(`/api/orders/${id}/request`).send({ type: "cancel", reason: "Vazgeçtim" }).expect(200);
+  assert.equal(r.body.status, "cancel_requested");
+  await a.post(`/api/orders/${id}/request`).send({ type: "cancel" }).expect(409);
+  await a.post(`/api/admin/orders/${id}/request`).send({ decision: "approved" }).expect(403);
+  const d = await manager.post(`/api/admin/orders/${id}/request`).send({ decision: "approved" }).expect(200);
+  assert.equal(d.body.status, "cancelled");
+  assert.equal(d.body.refundStatus, "not_required");
+  assert.equal((await Product.findById(prod._id)).stock, 5);
+  // Kargodaki sipariş iptal edilemez.
+  const id2 = await paidDemoOrder(a, prod, 1);
+  for (const s of ["preparing", "shipped"])
+    await manager.patch("/api/admin/orders/" + id2).send({ status: s }).expect(200);
+  const bad = await a.post(`/api/orders/${id2}/request`).send({ type: "cancel" }).expect(409);
+  assert.equal(bad.body.error, MSG.VAL024);
+  await Product.deleteOne({ _id: prod._id });
+});
+
+test("TC-36 return within 14 days of delivery; rejection restores status (VAL-025)", async () => {
+  const a = await buyer();
+  const prod = await Product.create({
+    name: "İade test ürünü",
+    category: chairs.name,
+    categoryId: chairs._id,
+    price: 100,
+    stock: 5,
+    image: "https://example.com/i.jpg",
+    model3dUrl: "builtin:chair",
+  });
+  const id = await paidDemoOrder(a, prod, 1);
+  let bad = await a.post(`/api/orders/${id}/request`).send({ type: "return" }).expect(409);
+  assert.equal(bad.body.error, MSG.VAL025);
+  for (const s of ["preparing", "shipped", "delivered"])
+    await manager.patch("/api/admin/orders/" + id).send({ status: s }).expect(200);
+  assert.ok((await Order.findById(id)).deliveredAt);
+  await a.post(`/api/orders/${id}/request`).send({ type: "return", reason: "Hasarlı" }).expect(200);
+  const rej = await manager.post(`/api/admin/orders/${id}/request`).send({ decision: "rejected", note: "Fotoğraf gerekli" }).expect(200);
+  assert.equal(rej.body.status, "delivered");
+  // 14 gün geçtiyse iade talebi açılamaz.
+  await Order.updateOne({ _id: id }, { $set: { deliveredAt: new Date(Date.now() - 15 * 86400000) } });
+  bad = await a.post(`/api/orders/${id}/request`).send({ type: "return" }).expect(409);
+  assert.equal(bad.body.error, MSG.VAL025);
+  await Order.updateOne({ _id: id }, { $set: { deliveredAt: new Date() } });
+  await a.post(`/api/orders/${id}/request`).send({ type: "return" }).expect(200);
+  const ok = await manager.post(`/api/admin/orders/${id}/request`).send({ decision: "approved" }).expect(200);
+  assert.equal(ok.body.status, "returned");
+  assert.equal((await Product.findById(prod._id)).stock, 5);
+  await Product.deleteOne({ _id: prod._id });
+});
+
+test("multi-piece placement saved and validated", async () => {
+  const a = await buyer();
+  const piece = { productId: p.id, x: 0, y: 0, scale: 1, rotation: 0 };
+  const r = await a
+    .post("/api/designs")
+    .send({ name: "Takım", items: [piece, { ...piece, x: 1.5 }] })
+    .expect(200);
+  assert.equal(r.body.items.length, 2);
+  assert.equal(r.body.productId, p.id);
+  await a.post("/api/designs").send({ name: "Fazla", items: Array(13).fill(piece) }).expect(400);
+  await a.post("/api/designs").send({ name: "Bozuk", items: [piece, { ...piece, scale: 9 }] }).expect(400);
+});
