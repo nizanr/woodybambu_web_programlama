@@ -4,12 +4,16 @@ import { User } from "./db.js";
 // Never overwrite a user's password or elevate an existing customer account.
 export async function bootstrapAdmin({ email, password } = {}) {
   if (!email && !password) return;
+  // "admin" kullanıcı adı ders demosu için istisnadır: şifre kısıtı aranmaz.
+  const isAdminAlias =
+    typeof email === "string" && email.trim().toLowerCase() === "admin";
   if (
     typeof email !== "string" ||
-    !/^\S+@\S+\.\S+$/.test(email) ||
     typeof password !== "string" ||
-    password.length < 12 ||
-    password.length > 128
+    password.length > 128 ||
+    (!isAdminAlias &&
+      (!/^\S+@\S+\.\S+$/.test(email) || password.length < 12)) ||
+    (isAdminAlias && password.length < 1)
   )
     throw Error(
       "Admin kurulumu için geçerli ADMIN_EMAIL ve 12–128 karakterli ADMIN_PASSWORD gerekli",

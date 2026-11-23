@@ -853,9 +853,9 @@ function App() {
                     E-posta
                     <input
                       name="email"
-                      type="email"
+                      type={modal === "login" ? "text" : "email"}
                       required
-                      autoComplete="email"
+                      autoComplete={modal === "login" ? "username" : "email"}
                     />
                   </label>
                   <label>
@@ -864,7 +864,7 @@ function App() {
                       name="password"
                       type="password"
                       required
-                      minLength="8"
+                      minLength={modal === "login" ? undefined : "8"}
                       maxLength="128"
                       autoComplete={
                         modal === "login" ? "current-password" : "new-password"
