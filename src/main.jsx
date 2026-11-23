@@ -7,6 +7,9 @@ import {
   STATUS_LABELS,
   VAL,
   istanbulDate,
+  RETURN_WINDOW_DAYS,
+  CANCELLABLE,
+  REFUND_LABELS,
 } from "./util.js";
 const Studio = lazy(() => import("./Studio"));
 const Admin = lazy(() => import("./Admin"));
@@ -179,7 +182,10 @@ function App() {
     [notifications, setNotifications] = useState([]),
     [coupon, setCoupon] = useState(""),
     [visible, setVisible] = useState(8),
-    [afterLogin, setAfterLogin] = useState(null);
+    [afterLogin, setAfterLogin] = useState(null),
+    [favorites, setFavorites] = useState([]),
+    [studioItems, setStudioItems] = useState(null),
+    [requestReason, setRequestReason] = useState({});
   const notify = (s) => { setToastHiding(false); setToast(s); };
   const isBuyer = ["customer", "admin"].includes(user?.role);
   const previewOn = settings?.preview.enabled !== false;
@@ -205,12 +211,47 @@ function App() {
       setCart({ items: [], summary: null });
       setAddresses([]);
       setNotifications([]);
+      setFavorites([]);
       return;
     }
     loadCart();
     loadAddresses();
     loadNotifications();
+    api("/api/favorites").then(setFavorites).catch(() => {});
   }, [user?.id]);
+  /* FR-035: favoriler */
+  const isFavorite = (p) => favorites.some((f) => f._id === p._id);
+  const toggleFavorite = async (p) => {
+    if (!user) {
+      notify("Favorilere eklemek için giriş yapın veya üye olun.");
+      setModal("login");
+      return;
+    }
+    try {
+      setFavorites(
+        await api("/api/favorites/" + p._id, { method: isFavorite(p) ? "DELETE" : "PUT" }),
+      );
+    } catch (e) {
+      notify(e.message);
+    }
+  };
+  /* FR-036: iptal / iade talebi */
+  const sendRequest = async (o, type) => {
+    try {
+      await api("/api/orders/" + o._id + "/request", {
+        method: "POST",
+        body: JSON.stringify({ type, reason: requestReason[o._id] || "" }),
+      });
+      notify(type === "cancel" ? "İptal talebiniz alındı" : "İade talebiniz alındı");
+      await openOrders();
+      loadNotifications();
+    } catch (e) {
+      notify(e.message);
+    }
+  };
+  const canReturn = (o) =>
+    o.status === "delivered" &&
+    Date.now() - new Date(o.deliveredAt || o.updatedAt) <= RETURN_WINDOW_DAYS * 86400000;
   useEffect(() => {
     setVisible(settings?.commerce.pageSize || 8);
   }, [category, search, settings]);
@@ -242,16 +283,18 @@ function App() {
     trackView(p);
   };
   /* FR-027: 3D önizleme ziyaretçi dahil herkese açıktır. */
-  const openStudio = (p) => {
+  const openStudio = (p, items = null) => {
     const target =
       p?.model3dUrl && p.isActive !== false
         ? p
         : products.find((x) => x.model3dUrl && x.isActive !== false);
     if (!previewOn || !target) return notify(VAL.VAL018);
     setSelected(target);
+    // FR-029: takım önerisinden açılırsa tüm parçalar fotoğrafa yerleştirilir.
+    setStudioItems(items);
     setModal("studio");
   };
-  const add = async (p) => {
+  const add = async (p, quantity = 1, quiet = false) => {
     if (!user) {
       notify(
         modal === "studio" ? VAL.VAL019 : "Sepete eklemek için giriş yapın veya üye olun.",
@@ -265,14 +308,22 @@ function App() {
       setCart(
         await api("/api/cart/items", {
           method: "POST",
-          body: JSON.stringify({ productId: p._id }),
+          body: JSON.stringify({ productId: p._id, quantity }),
         }),
       );
-      notify("Ürün sepetinize eklendi");
+      if (!quiet) notify("Ürün sepetinize eklendi");
+      return true;
     } catch (e) {
       notify(e.message);
       refreshProducts();
+      return false;
     }
+  };
+  /* Takımı tek seferde sepete ekleme (balkon önerisi ve stüdyo). */
+  const addMany = async (lines) => {
+    if (!user || !isBuyer) return add(lines[0].product);
+    for (const l of lines) if (!(await add(l.product, l.qty, true))) return;
+    notify("Takım sepetinize eklendi");
   };
   const setQuantity = async (line, quantity) => {
     if (quantity < 1) return removeLine(line);
@@ -567,6 +618,8 @@ function App() {
             products={products}
             onPreview={openStudio}
             onDetail={openDetail}
+            onPreviewSet={(items) => openStudio(items[0].product, items)}
+            onAddSet={addMany}
           />
           <section className="collection" id="collection">
             <div className="section-heading reveal">
@@ -627,6 +680,14 @@ function App() {
                     <span className="product-tag">
                       {i === 0 ? "ÇOK SEVİLEN" : "DOĞAL DOKULAR"}
                     </span>
+                    <button
+                      className={"fav-btn" + (isFavorite(p) ? " on" : "")}
+                      aria-pressed={isFavorite(p)}
+                      aria-label={(isFavorite(p) ? "Favorilerden çıkar: " : "Favorilere ekle: ") + p.name}
+                      onClick={() => toggleFavorite(p)}
+                    >
+                      {isFavorite(p) ? "♥" : "♡"}
+                    </button>
                     <button
                       className="quick-add"
                       onClick={() => add(p)}
@@ -791,6 +852,8 @@ function App() {
             notify={notify}
             settings={settings}
             onAddToCart={add}
+            onAddMany={addMany}
+            initialItems={studioItems}
             onLoginRequest={() => {
               notify(VAL.VAL019);
               setAfterLogin("studio");
@@ -944,6 +1007,75 @@ function App() {
                     ))}
                   </ul>
                 )}
+                <h3>Favorilerim</h3>
+                {!favorites.length ? (
+                  <p className="muted">Ürün kartlarındaki ♡ ile favori ekleyebilirsiniz.</p>
+                ) : (
+                  <ul className="favorites">
+                    {favorites.map((f) => (
+                      <li key={f._id}>
+                        <button className="text-btn" onClick={() => openDetail(f)}>
+                          {f.name}
+                        </button>
+                        <span>{money(f.price)}</span>
+                        <button
+                          className="text-btn"
+                          aria-label={f.name + " favorilerden çıkar"}
+                          onClick={() => toggleFavorite(f)}
+                        >
+                          Çıkar
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <details className="address-form">
+                  <summary>Şifremi değiştir</summary>
+                  <form
+                    className="admin-form"
+                    onSubmit={async (e) => {
+                      e.preventDefault();
+                      const f = new FormData(e.target);
+                      if (f.get("newPassword") !== f.get("repeat"))
+                        return notify("Yeni şifreler aynı değil.");
+                      try {
+                        await api("/api/account/password", {
+                          method: "POST",
+                          body: JSON.stringify({
+                            currentPassword: f.get("currentPassword"),
+                            newPassword: f.get("newPassword"),
+                          }),
+                        });
+                        e.target.reset();
+                        notify("Şifreniz değiştirildi");
+                        loadNotifications();
+                      } catch (err) {
+                        notify(err.message);
+                      }
+                    }}
+                  >
+                    <label>
+                      Mevcut şifre
+                      <input name="currentPassword" type="password" required autoComplete="current-password" maxLength="128" />
+                    </label>
+                    <label>
+                      Yeni şifre (en az {user.role === "admin" ? 12 : 8} karakter)
+                      <input
+                        name="newPassword"
+                        type="password"
+                        required
+                        minLength={user.role === "admin" ? 12 : 8}
+                        maxLength="128"
+                        autoComplete="new-password"
+                      />
+                    </label>
+                    <label>
+                      Yeni şifre (tekrar)
+                      <input name="repeat" type="password" required maxLength="128" autoComplete="new-password" />
+                    </label>
+                    <button className="primary">Şifreyi değiştir</button>
+                  </form>
+                </details>
                 <h3>Adreslerim</h3>
                 {addresses.map((a) => (
                   <div className="address-row" key={a._id}>
@@ -1280,6 +1412,47 @@ function App() {
                         >
                           Ödeme durumunu doğrula
                         </button>
+                      )}
+                      {o.request?.type && (
+                        <p className="muted">
+                          {o.request.type === "cancel" ? "İptal" : "İade"} talebi
+                          {o.request.decision
+                            ? o.request.decision === "approved"
+                              ? " onaylandı."
+                              : ` reddedildi${o.request.note ? ": " + o.request.note : "."}`
+                            : " inceleniyor."}
+                          {o.refundStatus && ` ${REFUND_LABELS[o.refundStatus]}.`}
+                        </p>
+                      )}
+                      {(CANCELLABLE.includes(o.status) || canReturn(o)) && (
+                        <div className="order-request">
+                          <select
+                            aria-label="Talep nedeni"
+                            value={requestReason[o._id] || ""}
+                            onChange={(e) =>
+                              setRequestReason({ ...requestReason, [o._id]: e.target.value })
+                            }
+                          >
+                            <option value="">Neden (isteğe bağlı)</option>
+                            {(CANCELLABLE.includes(o.status)
+                              ? ["Vazgeçtim", "Yanlış ürün seçtim", "Teslim süresi uzun"]
+                              : ["Ürün hasarlı geldi", "Ölçüsü uymadı", "Beklentimi karşılamadı"]
+                            ).map((r) => (
+                              <option key={r}>{r}</option>
+                            ))}
+                          </select>
+                          <button
+                            className="secondary"
+                            onClick={() => sendRequest(o, CANCELLABLE.includes(o.status) ? "cancel" : "return")}
+                          >
+                            {CANCELLABLE.includes(o.status) ? "İptal talebi oluştur" : "İade talebi oluştur"}
+                          </button>
+                          {canReturn(o) && (
+                            <small>
+                              Teslimden itibaren {RETURN_WINDOW_DAYS} gün içinde iade talebi oluşturabilirsiniz.
+                            </small>
+                          )}
+                        </div>
                       )}
                     </div>
                   ))

@@ -31,7 +31,18 @@ export const STATUS_LABELS = {
   delivered: "Teslim edildi",
   cancelled: "İptal edildi",
   stock_conflict: "Stok sorunu — iade gerekli",
+  cancel_requested: "İptal talebi inceleniyor",
+  return_requested: "İade talebi inceleniyor",
+  returned: "İade edildi",
 };
+export const REFUND_LABELS = {
+  not_required: "Ücret iadesi gerekmez (demo)",
+  manual_pending: "Ücret iadesi sağlayıcıdan yapılacak",
+  done: "Ücret iade edildi",
+};
+// FR-036: iade süresi (gün) ve iptal edilebilir durumlar; sunucu da doğrular.
+export const RETURN_WINDOW_DAYS = 14;
+export const CANCELLABLE = ["paid", "demo_paid", "preparing"];
 export const NEXT_STATUS = {
   paid: "preparing",
   demo_paid: "preparing",

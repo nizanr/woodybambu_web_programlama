@@ -4,6 +4,7 @@ import {
   ROLE_LABELS,
   STATUS_LABELS,
   NEXT_STATUS,
+  REFUND_LABELS,
   MODEL_TYPES,
   istanbulDate,
 } from "./util.js";
@@ -375,6 +376,38 @@ function Orders({ data, send }) {
         >
           Durumu “{STATUS_LABELS[NEXT_STATUS[o.status]]}” yap
         </button>
+      )}
+      {o.request?.type && (
+        <p className="muted">
+          {o.request.type === "cancel" ? "İptal" : "İade"} talebi
+          {o.request.reason ? `: ${o.request.reason}` : ""}
+          {o.request.decision &&
+            ` · ${o.request.decision === "approved" ? "onaylandı" : "reddedildi"}`}
+          {o.refundStatus && ` · ${REFUND_LABELS[o.refundStatus]}`}
+        </p>
+      )}
+      {["cancel_requested", "return_requested"].includes(o.status) && (
+        <div className="account-actions">
+          <button
+            className="primary"
+            onClick={() =>
+              send("/api/admin/orders/" + o._id + "/request", "POST", { decision: "approved" })
+            }
+          >
+            Talebi onayla (stok geri eklenir)
+          </button>
+          <button
+            className="secondary"
+            onClick={() =>
+              send("/api/admin/orders/" + o._id + "/request", "POST", {
+                decision: "rejected",
+                note: "Talep koşulları karşılamıyor",
+              })
+            }
+          >
+            Reddet
+          </button>
+        </div>
       )}
     </div>
   ));

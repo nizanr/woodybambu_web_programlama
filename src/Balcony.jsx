@@ -77,7 +77,7 @@ function Plan({ balcony, option }) {
   );
 }
 
-export default function Balcony({ api, products, onPreview, onDetail }) {
+export default function Balcony({ api, products, onPreview, onDetail, onPreviewSet, onAddSet }) {
   const [width, setWidth] = useState("");
   const [depth, setDepth] = useState("");
   const [result, setResult] = useState(null);
@@ -86,6 +86,7 @@ export default function Balcony({ api, products, onPreview, onDetail }) {
   const [busy, setBusy] = useState(false);
 
   const full = (lean) => products.find((p) => p._id === lean._id) || lean;
+  const parts = (set) => set.items.map((i) => ({ product: full(i.product), qty: i.qty }));
   const run = async (w, d) => {
     if (!valid(w) || !valid(d)) return setError(VAL021);
     setError("");
@@ -133,14 +134,29 @@ export default function Balcony({ api, products, onPreview, onDetail }) {
           </span>
         </button>
         <div className="balcony-actions">
-          {lead.model3dUrl && (
-            <button className="text-btn" onClick={() => onPreview(lead)}>
-              Bahçede Gör
-            </button>
+          {isSet ? (
+            <>
+              {parts(o).every((i) => i.product.model3dUrl) && (
+                <button className="text-btn" onClick={() => onPreviewSet(parts(o))}>
+                  Takımı bahçende gör
+                </button>
+              )}
+              <button className="text-btn" onClick={() => onAddSet(parts(o))}>
+                Takımı sepete ekle
+              </button>
+            </>
+          ) : (
+            <>
+              {lead.model3dUrl && (
+                <button className="text-btn" onClick={() => onPreview(lead)}>
+                  Bahçede Gör
+                </button>
+              )}
+              <button className="text-btn" onClick={() => onDetail(lead)}>
+                İncele
+              </button>
+            </>
           )}
-          <button className="text-btn" onClick={() => onDetail(lead)}>
-            İncele
-          </button>
         </div>
       </li>
     );

@@ -42,22 +42,73 @@ export default function Studio({
   notify,
   onClose,
   onAddToCart,
+  onAddMany,
   onLoginRequest,
   settings,
+  initialItems,
 }) {
   const host = useRef(),
     sceneRef = useRef(null),
     viewRef = useRef(null),
-    modelRef = useRef(null),
+    modelsRef = useRef(new Map()),
     fileRef = useRef(null);
   const preview = settings?.preview || { maxPhotoMb: 8, loadTargetSec: 5, saveLayoutEnabled: true };
   const candidates = products.filter((p) => p.model3dUrl && p.isActive !== false);
-  const [product, setProduct] = useState(initial),
-    [photo, setPhoto] = useState(null),
-    [scale, setScale] = useState(1),
-    [rotation, setRotation] = useState(0),
+  /* FR-029: fotoğrafta birden fazla parça. Her parçanın kendi ürünü ve
+     konum/ölçek/dönüş değeri vardır; kontroller seçili parçayı değiştirir. */
+  const MAX_PIECES = 12;
+  const nextId = useRef(1);
+  const arrange = (list) =>
+    list.slice(0, MAX_PIECES).map((p, i, arr) => ({
+      id: nextId.current++,
+      product: p,
+      x: +((i - (arr.length - 1) / 2) * Math.min(2.2, 7 / arr.length)).toFixed(2),
+      y: 0,
+      scale: arr.length > 1 ? 0.6 : 1,
+      rotation: 0,
+    }));
+  const [items, setItems] = useState(() =>
+    arrange(
+      initialItems?.length
+        ? initialItems.flatMap(({ product: p, qty }) => Array.from({ length: Math.min(qty, 6) }, () => p))
+        : [initial],
+    ),
+  );
+  const [activeId, setActiveId] = useState(() => items[0].id);
+  const active = items.find((i) => i.id === activeId) || items[0];
+  const product = active.product,
+    position = { x: active.x, y: active.y },
+    scale = active.scale,
+    rotation = active.rotation;
+  const patchActive = (fn) =>
+    setItems((list) => list.map((i) => (i.id === active.id ? fn(i) : i)));
+  const val = (v, prev) => (typeof v === "function" ? v(prev) : v);
+  const setScale = (v) => patchActive((i) => ({ ...i, scale: val(v, i.scale) }));
+  const setRotation = (v) => patchActive((i) => ({ ...i, rotation: val(v, i.rotation) }));
+  const setPosition = (v) =>
+    patchActive((i) => {
+      const p = val(v, { x: i.x, y: i.y });
+      return { ...i, x: p.x, y: p.y };
+    });
+  const setProduct = (p) => p && patchActive((i) => ({ ...i, product: p }));
+  const addPiece = () => {
+    if (items.length >= MAX_PIECES) return notify(`En fazla ${MAX_PIECES} parça yerleştirebilirsiniz.`);
+    const piece = {
+      ...active,
+      id: nextId.current++,
+      x: Math.min(10, +(active.x + 1.2).toFixed(2)),
+    };
+    setItems([...items, piece]);
+    setActiveId(piece.id);
+  };
+  const removePiece = (id) => {
+    if (items.length < 2) return;
+    const rest = items.filter((i) => i.id !== id);
+    setItems(rest);
+    if (id === active.id) setActiveId(rest[0].id);
+  };
+  const [photo, setPhoto] = useState(null),
     [name, setName] = useState("Bahçem"),
-    [position, setPosition] = useState({ x: 0, y: 0 }),
     [saved, setSaved] = useState([]),
     [savePhoto, setSavePhoto] = useState(false),
     [status, setStatus] = useState("loading"),
@@ -126,59 +177,80 @@ export default function Studio({
     };
   }, []);
 
+  /* Parçaların modelleri: ürünü değişen ya da yeni eklenen parça yüklenir,
+     kaldırılan parçanın modeli sahneden çıkarılır (FR-028, FR-030). */
+  const pieceKey = items.map((i) => i.id + ":" + i.product._id).join(",");
   useEffect(() => {
-    let cancelled = false;
-    const started = performance.now();
+    const holder = sceneRef.current;
+    if (!holder) return;
+    const models = modelsRef.current;
+    for (const [id, m] of models)
+      if (!items.some((i) => i.id === id)) {
+        holder.remove(m.wrapper);
+        disposeTree(m.wrapper);
+        models.delete(id);
+      }
+    const pending = items.filter((i) => models.get(i.id)?.productId !== i.product._id);
+    if (!pending.length) return;
     setStatus((s) => (s === "nowebgl" ? s : "loading"));
-    (async () => {
-      let info;
-      try {
-        // Erişim sunucuda da doğrulanır (BR-024): oturumsuz istek 401 döner.
-        info = await api("/api/preview/" + product._id);
-      } catch (e) {
-        if (!cancelled) {
-          setStatus("unavailable");
-          notify(e.message);
+    const started = performance.now();
+    let cancelled = false;
+    Promise.all(
+      pending.map(async (it) => {
+        let info;
+        try {
+          // Erişim sunucuda da doğrulanır (BR-024).
+          info = await api("/api/preview/" + it.product._id);
+          const model = info.model3dUrl.startsWith("builtin:")
+            ? buildBuiltin(info.model3dUrl.slice(8), info.color)
+            : await loadGltf(info.model3dUrl, Math.max(preview.loadTargetSec, 1) * 2000);
+          if (cancelled) return disposeTree(model);
+          const old = models.get(it.id);
+          if (old) {
+            holder.remove(old.wrapper);
+            disposeTree(old.wrapper);
+          }
+          const wrapper = new THREE.Group();
+          wrapper.userData.itemId = it.id;
+          wrapper.add(model);
+          // Seçili parçayı gösteren zemin halkası.
+          const ring = new THREE.Mesh(
+            new THREE.RingGeometry(1.35, 1.45, 48),
+            new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.75, depthWrite: false }),
+          );
+          ring.rotation.x = -Math.PI / 2;
+          ring.position.y = -0.84;
+          ring.visible = false;
+          wrapper.userData.ring = ring;
+          wrapper.add(ring);
+          holder.add(wrapper);
+          models.set(it.id, { productId: it.product._id, wrapper });
+          return true;
+        } catch (e) {
+          if (!cancelled) notify(info ? VAL.VAL018 : e.message);
+          return false;
         }
-        return;
-      }
-      const holder = sceneRef.current;
-      if (!holder) return;
-      let model;
-      try {
-        model = info.model3dUrl.startsWith("builtin:")
-          ? buildBuiltin(info.model3dUrl.slice(8), info.color)
-          : await loadGltf(info.model3dUrl, Math.max(preview.loadTargetSec, 1) * 2000);
-      } catch {
-        if (!cancelled) {
-          setStatus("unavailable");
-          notify(VAL.VAL018);
-        }
-        return;
-      }
-      if (cancelled) return disposeTree(model);
-      if (modelRef.current) {
-        holder.remove(modelRef.current);
-        disposeTree(modelRef.current);
-      }
-      holder.add(model);
-      modelRef.current = model;
+      }),
+    ).then((ok) => {
+      if (cancelled) return;
       setLoadMs(Math.round(performance.now() - started));
-      setStatus("ready");
-    })();
+      setStatus(ok.some(Boolean) || models.size ? "ready" : "unavailable");
+    });
     return () => {
       cancelled = true;
     };
-  }, [product._id]);
+  }, [pieceKey]);
 
   useEffect(() => {
-    const g = sceneRef.current;
-    if (g) {
-      g.scale.setScalar(scale);
-      g.rotation.y = (rotation * Math.PI) / 180 + 0.4;
-      g.position.set(position.x, position.y, 0);
+    for (const it of items) {
+      const w = modelsRef.current.get(it.id)?.wrapper;
+      if (!w) continue;
+      w.scale.setScalar(it.scale);
+      w.rotation.y = (it.rotation * Math.PI) / 180 + 0.4;
+      w.position.set(it.x, it.y, 0);
+      w.userData.ring.visible = items.length > 1 && it.id === active.id;
     }
-  }, [scale, rotation, position, status]);
+  }, [items, active.id, status]);
   useEffect(
     () => () => {
       if (photo?.url) URL.revokeObjectURL(photo.url);
@@ -206,26 +278,43 @@ export default function Studio({
      sıkıştırma (ölçek) ve çevirme (döndürme) — FR-029. */
   const pointers = useRef(new Map()),
     gesture = useRef(null);
-  const snapshot = () => {
+  const snapshot = (from = active) => {
     const pts = [...pointers.current.values()];
     if (pts.length === 1)
-      gesture.current = { kind: "drag", x: pts[0].x, y: pts[0].y, p: position };
+      gesture.current = { kind: "drag", x: pts[0].x, y: pts[0].y, p: { x: from.x, y: from.y } };
     else if (pts.length >= 2) {
       const [a, b] = pts;
       gesture.current = {
         kind: "pinch",
         dist: Math.hypot(b.x - a.x, b.y - a.y),
         angle: Math.atan2(b.y - a.y, b.x - a.x),
-        scale,
-        rotation,
+        scale: from.scale,
+        rotation: from.rotation,
       };
     } else gesture.current = null;
+  };
+  /* Dokunulan parçayı seçer (ışın izleme); boş alana dokunmak seçimi değiştirmez. */
+  const pick = (e) => {
+    const view = viewRef.current;
+    if (!view || items.length < 2) return null;
+    const r = host.current.getBoundingClientRect();
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera(
+      new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1),
+      view.camera,
+    );
+    const hit = ray.intersectObjects(sceneRef.current.children, true).find((h) => h.object.visible);
+    let o = hit?.object;
+    while (o && o.userData.itemId === undefined) o = o.parent;
+    return o ? items.find((i) => i.id === o.userData.itemId) : null;
   };
   const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
   const onPointerDown = (e) => {
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     e.currentTarget.setPointerCapture(e.pointerId);
-    snapshot();
+    const picked = pointers.current.size === 1 ? pick(e) : null;
+    if (picked && picked.id !== active.id) setActiveId(picked.id);
+    snapshot(picked || active);
   };
   const onPointerMove = (e) => {
     if (!pointers.current.has(e.pointerId)) return;
@@ -322,11 +411,13 @@ export default function Studio({
         method: "POST",
         body: JSON.stringify({
           name,
-          productId: product._id,
-          x: +position.x.toFixed(3),
-          y: +position.y.toFixed(3),
-          scale,
-          rotation,
+          items: items.map((i) => ({
+            productId: i.product._id,
+            x: +i.x.toFixed(3),
+            y: +i.y.toFixed(3),
+            scale: i.scale,
+            rotation: i.rotation,
+          })),
         }),
       });
       let final = d;
@@ -353,12 +444,21 @@ export default function Studio({
     }
   };
   const openSaved = async (d) => {
-    const p = products.find((x) => x._id === d.productId);
-    if (!p) return notify(VAL.VAL018);
-    setProduct(p);
-    setPosition({ x: d.x, y: d.y });
-    setScale(d.scale);
-    setRotation(d.rotation);
+    const pieces = (d.items?.length ? d.items : [d]).map((i) => ({
+      ...i,
+      product: products.find((x) => x._id === i.productId),
+    }));
+    if (pieces.some((i) => !i.product)) return notify(VAL.VAL018);
+    const restored = pieces.slice(0, MAX_PIECES).map((i) => ({
+      id: nextId.current++,
+      product: i.product,
+      x: i.x,
+      y: i.y,
+      scale: i.scale,
+      rotation: i.rotation,
+    }));
+    setItems(restored);
+    setActiveId(restored[0].id);
     setName(d.name);
     if (d.photoRef) {
       try {
@@ -425,13 +525,28 @@ export default function Studio({
               </span>
             )}
             <span className="scene-note">
+              {items.length > 1 ? "Parçayı seçmek için üzerine dokunun · " : ""}
               Sürükleyerek taşıyın · iki parmakla büyütün/döndürün · tekerlekle ölçekleyin ·
               klavye: oklar, Q/E, +/−
             </span>
           </div>
           <aside>
+            {items.length > 1 && (
+              <div className="pieces" role="group" aria-label="Yerleşimdeki parçalar">
+                {items.map((it, n) => (
+                  <span key={it.id} className={"piece" + (it.id === active.id ? " on" : "")}>
+                    <button aria-pressed={it.id === active.id} onClick={() => setActiveId(it.id)}>
+                      {n + 1}. {it.product.name.split(" ")[0]}
+                    </button>
+                    <button aria-label={`${n + 1}. parçayı kaldır`} onClick={() => removePiece(it.id)}>
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
             <label>
-              Ürün
+              {items.length > 1 ? "Seçili parçanın ürünü" : "Ürün"}
               <select
                 value={product._id}
                 onChange={(e) => setProduct(candidates.find((p) => p._id === e.target.value))}
@@ -493,6 +608,9 @@ export default function Studio({
             >
               Yerleşimi sıfırla
             </button>
+            <button className="text-btn" onClick={addPiece} disabled={items.length >= MAX_PIECES}>
+              + Fotoğrafa bir parça daha ekle
+            </button>
             <button
               className="text-btn"
               disabled={status !== "ready"}
@@ -507,6 +625,22 @@ export default function Studio({
                 onClick={() => onAddToCart(product)}
               >
                 {product.stock ? "Satın al · Sepete ekle" : VAL.VAL004}
+              </button>
+            )}
+            {canBuy && items.length > 1 && onAddMany && (
+              <button
+                className="secondary"
+                onClick={() => {
+                  const byId = new Map();
+                  for (const it of items) {
+                    const l = byId.get(it.product._id) || { product: it.product, qty: 0 };
+                    l.qty++;
+                    byId.set(it.product._id, l);
+                  }
+                  onAddMany([...byId.values()]);
+                }}
+              >
+                Tüm parçaları sepete ekle ({items.length})
               </button>
             )}
             {canSave && (

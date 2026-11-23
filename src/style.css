@@ -1978,3 +1978,81 @@ label.check input {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* ─── Favoriler (FR-035) ve iptal/iade (FR-036) ─── */
+.fav-btn {
+  position: absolute;
+  right: 48px;
+  top: 12px;
+  width: 29px;
+  height: 29px;
+  border-radius: 50%;
+  background: #fffdf6;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--green);
+}
+.fav-btn.on {
+  color: #a0412d;
+}
+.favorites {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 10px;
+  display: grid;
+  gap: 4px;
+}
+.favorites li {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+}
+.favorites .text-btn {
+  padding: 6px 0;
+}
+.order-request {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+}
+.order-request select {
+  min-height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #fff;
+  padding: 0 8px;
+}
+.order-request small {
+  flex-basis: 100%;
+  color: var(--muted);
+}
+/* Stüdyoda çoklu parça (FR-029) */
+.pieces {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.piece {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+  font-size: 11px;
+  background: #fff;
+}
+.piece.on {
+  border-color: var(--green);
+  background: #eef1ea;
+}
+.piece button {
+  padding: 6px 10px;
+  min-height: 32px;
+}
+.piece button + button {
+  padding: 6px 8px;
+  border-left: 1px solid var(--line);
+}
