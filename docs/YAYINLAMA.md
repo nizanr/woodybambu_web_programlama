@@ -20,7 +20,7 @@ Bu uygulama sunucu ve veritabanı gerektirir; GitHub Pages üzerinde çalışmaz
 ## 2. Web servisi — Render
 
 1. https://dashboard.render.com/ adresinde hesap açın ve GitHub hesabınızı bağlayın. Yalnızca gerekli depo erişimini verin.
-2. New → Blueprint ile `nizanr/bahce_mobilya_satis` deposunun `main` dalını seçin. Render `render.yaml` dosyasını okuyacak.
+2. New → Blueprint ile `nizanr/woodybambu_web_programlama` deposunun `main` dalını seçin. Render `render.yaml` dosyasını okuyacak.
 3. Render'ın istediği `MONGODB_URI` değerine Atlas'tan aldığınız gerçek bağlantı dizesini girin. `SESSION_SECRET` otomatik oluşturulur; `PORT` Render tarafından verilir. Bunları elle üretmeniz gerekmez.
 4. Blueprint ücretsiz web servisi planını belirtir. Panelde gösterilen planı/fiyatı kontrol edin; ücretsiz seçenek uygun değilse ücretli plana otomatik geçmeyin.
 5. Servisi oluşturun, Outbound IP adreslerini Atlas Network Access'e ekleyin ve gerekirse Manual Deploy → Deploy latest commit seçin.
