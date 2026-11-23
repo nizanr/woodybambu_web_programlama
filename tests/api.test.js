@@ -694,3 +694,50 @@ test("production behind HTTPS proxy accepts Render origin and sets secure cookie
       else process.env[name] = value;
   }
 });
+
+test("TC-32 balcony size recommendation: fitting in-stock products, VAL-021", async () => {
+  const tables = await Category.findOne({ name: "Masalar" });
+  const t = await Product.create({
+    name: "Test balkon masası",
+    category: tables.name,
+    categoryId: tables._id,
+    price: 900,
+    stock: 3,
+    image: "https://example.com/t.jpg",
+    model3dUrl: "builtin:table",
+    widthCm: 120,
+    depthCm: 70,
+    heightCm: 75,
+  });
+  const out = await Product.create({
+    name: "Stokta olmayan masa",
+    category: tables.name,
+    categoryId: tables._id,
+    price: 900,
+    stock: 0,
+    image: "https://example.com/t.jpg",
+    model3dUrl: "builtin:table",
+    widthCm: 100,
+    depthCm: 60,
+  });
+  const r = await guest.get("/api/recommend?width=300&depth=150").expect(200);
+  const names = r.body.items.map((i) => i.product.name);
+  assert.ok(names.includes(t.name));
+  assert.ok(!names.includes(out.name));
+  assert.equal(r.body.walkwayCm, 60);
+  const fit = r.body.items.find((i) => i.product.name === t.name).fit;
+  assert.ok(fit.w <= 300 && fit.d <= 150);
+  // Çok küçük balkonda masa sığmaz.
+  const small = await guest.get("/api/recommend?width=100&depth=80").expect(200);
+  assert.ok(!small.body.items.some((i) => i.product.name === t.name));
+  for (const q of ["width=40&depth=150", "width=300", "width=abc&depth=150", "width=300.5&depth=150"]) {
+    const bad = await guest.get("/api/recommend?" + q).expect(400);
+    assert.equal(bad.body.error, MSG.VAL021);
+  }
+  // Ürün ölçüsü doğrulaması (VAL-013).
+  await manager
+    .patch("/api/admin/products/" + t.id)
+    .send({ widthCm: -5 })
+    .expect(400);
+  await Product.deleteMany({ _id: { $in: [t._id, out._id] } });
+});
