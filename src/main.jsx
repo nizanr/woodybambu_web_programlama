@@ -424,6 +424,7 @@ function App() {
           </button>
           <button
             className="account"
+            aria-label={user ? `Hesabım (${user.name})` : "Hesabım / giriş yap"}
             onClick={() => setModal(user ? "account" : "login")}
           >
             ♙ <span>{user ? user.name.split(" ")[0] : "Hesabım"}</span>
