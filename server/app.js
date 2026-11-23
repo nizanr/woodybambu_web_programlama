@@ -227,14 +227,27 @@ export function createApp(uri, { paymentClient } = {}) {
     attempts.set(key, a);
     if (++a.count > 30)
       return fail(res, 429, "Çok fazla deneme. 10 dakika sonra tekrar deneyin.");
-    if (typeof email !== "string" || !/^\S+@\S+\.\S+$/.test(email.trim()))
-      return fail(res, 400, MSG.VAL001);
-    if (
+    // Yalnızca giriş için ayrılmış "admin" kullanıcı adı istisnadır; üyelikte
+    // e-posta ve şifre kuralları aynen geçerlidir.
+    const adminAlias =
+      req.params.action === "login" &&
+      typeof email === "string" &&
+      email.trim().toLowerCase() === "admin";
+    if (!adminAlias) {
+      if (typeof email !== "string" || !/^\S+@\S+\.\S+$/.test(email.trim()))
+        return fail(res, 400, MSG.VAL001);
+      if (
+        typeof password !== "string" ||
+        password.length < 8 ||
+        password.length > 128
+      )
+        return fail(res, 400, "Şifre 8–128 karakter olmalıdır.");
+    } else if (
       typeof password !== "string" ||
-      password.length < 8 ||
+      password.length < 1 ||
       password.length > 128
     )
-      return fail(res, 400, "Şifre 8–128 karakter olmalıdır.");
+      return fail(res, 400, "Şifre girin.");
     const normalized = email.trim().toLowerCase();
     let u;
     if (req.params.action === "register") {
