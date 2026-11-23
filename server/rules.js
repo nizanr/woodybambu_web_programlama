@@ -22,6 +22,10 @@ export const MSG = {
   VAL019: "Yerleşimi kaydetmek veya satın almak için hesap oluşturup giriş yapınız.",
   VAL020: "Kayıtlı yerleşim bulunamadı.",
   VAL021: "Balkon eni ve derinliği 50–2000 cm arasında tam sayı olmalıdır.",
+  VAL022: "Mevcut şifre hatalı.",
+  VAL023: "Yeni şifre gerekli uzunlukta olmalı ve mevcut şifreden farklı olmalıdır.",
+  VAL024: "Bu sipariş için iptal talebi oluşturulamaz; sipariş kargoya verilmiş ya da sonuçlanmış.",
+  VAL025: "İade talebi yalnızca teslimattan sonraki 14 gün içinde oluşturulabilir.",
 };
 
 /* SRS 5 — parametre varsayılanları (onay bekleyenler “önerilen başlangıç kuralı”). */
@@ -131,6 +135,25 @@ export const ORDER_TRANSITIONS = {
 };
 export const canTransition = (from, to) =>
   (ORDER_TRANSITIONS[from] || []).includes(to);
+
+/* FR-036 / BR-027 — iptal ve iade talepleri (DEC-03 kararı).
+   İptal: ödenmiş ama kargoya verilmemiş sipariş. İade: teslimden sonraki
+   14 gün içinde. Talep yönetici onayıyla sonuçlanır. */
+export const RETURN_WINDOW_DAYS = 14;
+export const CANCELLABLE = ["paid", "demo_paid", "preparing"];
+export function requestError(order, type, now = new Date()) {
+  if (type === "cancel")
+    return CANCELLABLE.includes(order.status) ? null : "VAL024";
+  if (type === "return") {
+    if (order.status !== "delivered") return "VAL025";
+    const from = order.deliveredAt || order.updatedAt;
+    if (!from || now - new Date(from) > RETURN_WINDOW_DAYS * 86400000) return "VAL025";
+    return null;
+  }
+  return "VAL024";
+}
+/* Şifre kuralı: yönetim rolleri için daha uzun (NFR-01). */
+export const minPasswordLength = (role) => (role === "admin" ? 12 : 8);
 
 /* BR-018 — rapor tarihlerini seçili saat diliminde gün başlangıcına çevirir. */
 function tzOffsetMs(date, timeZone) {
