@@ -18,3 +18,4 @@ Bu dosya bir hata bulgusu listesi değildir. Manuel test planındaki bekleyen du
 - Üretim modunda HTTPS proxy arkasında Secure/HttpOnly oturum çerezi, Render kaynak adresi ve güçlü oturum anahtarı gereksinimi denetlendi.
 - Uygulama Render üzerinde yayında: https://woody-bambu.onrender.com (23.11.2026).
 - 23.11.2026 sonrası değişiklikler (admin kullanıcı adı istisnası, ilk admin şifre kuralı, stüdyo klavye kısayolları ve PNG indirme) için `npm test` ve `npx playwright test` yeniden çalıştırılmalıdır.
+- Eklenen ve henüz yerelde çalıştırılmamış API testleri: TC-33 (şifre değiştirme), TC-34 (favoriler), TC-35 (iptal + stok iadesi), TC-36 (14 gün iade penceresi, ret/onay), çoklu parça yerleşimi. `tests/mail.test.js` (sahte SMTP sunucusu, 3 test) geçti. Birleştirmeden önce `npm test`, `npx playwright test` ve `npm run build` çalıştırılmalıdır.
