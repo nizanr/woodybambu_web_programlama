@@ -108,7 +108,7 @@ Tüm mesajlar `server/rules.js` → `MSG` içinde SRS metniyle birebir tutulur (
 
 ## SRS'ten bilinçli sapma: önizleme herkese açık
 
-Ekip kararıyla 3D önizleme ziyaretçilere de açıldı; yerleşimi kaydetme ve sepete ekleme hâlâ hesap gerektirir. SRS'in bir sonraki sürümünde şu maddeler güncellenmelidir:
+Ekip kararıyla 3D önizleme ziyaretçilere de açıldı; yerleşimi kaydetme ve sepete ekleme hâlâ hesap gerektirir. Aşağıdaki maddeler SRS v1.1'de (23.11.2026) bu karara göre güncellendi; 10.6 akış diyagramı görsel olduğu için ayrıca elle güncellenmelidir:
 
 | Madde | Yeni ifade önerisi |
 | ----- | ------------------ |
