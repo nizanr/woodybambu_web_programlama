@@ -1,35 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { VAL, money } from "./util.js";
+import { buildBuiltin } from "./models3d.js";
 
-/* Temsili Three.js modeli (builtin:<tip>) */
-function buildBuiltin(type, color) {
-  const group = new THREE.Group();
-  const wood = new THREE.MeshStandardMaterial({ color: color || "#b79b77", roughness: 0.85 }),
-    fabric = new THREE.MeshStandardMaterial({ color: "#eee6d9", roughness: 1 });
-  const box = (w, h, d, x, y, z, mat = wood) => {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
-    m.position.set(x, y, z);
-    group.add(m);
-  };
-  const table = type === "table",
-    sofa = type === "sofa",
-    lounger = type === "lounger";
-  const w = sofa ? 2.6 : table ? 2.7 : 1.2,
-    d = lounger ? 2.5 : table ? 1.6 : 1.15;
-  box(w, 0.15, d, 0, 0, 0);
-  for (const x of [-w / 2 + 0.12, w / 2 - 0.12])
-    for (const z of [-d / 2 + 0.12, d / 2 - 0.12]) box(0.12, 0.8, 0.12, x, -0.45, z);
-  if (!table) {
-    box(w - 0.12, 0.2, d - 0.12, 0, 0.16, 0, fabric);
-    box(w, 0.85, 0.12, 0, 0.5, -d / 2);
-    box(w - 0.15, 0.65, 0.17, 0, 0.5, -d / 2 + 0.1, fabric);
-    for (const x of [-w / 2, w / 2]) box(0.12, 0.45, d, x, 0.3, 0);
-    if (sofa)
-      for (const x of [-0.82, 0, 0.82]) box(0.76, 0.15, 0.94, x, 0.29, 0.02, fabric);
-  }
-  return group;
-}
 /* Harici GLB/GLTF modeli; boyutu sahneye sığacak şekilde normalize edilir. */
 async function loadGltf(url, timeoutMs) {
   const { GLTFLoader } = await import("three/examples/jsm/loaders/GLTFLoader.js");
@@ -116,6 +89,9 @@ export default function Studio({
     camera.position.set(0, 3, 8);
     camera.lookAt(0, 0, 0);
     renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    // Bambu ve kumaş tonlarının fotoğrafla daha doğal karışması için.
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.0;
     el.appendChild(renderer.domElement);
     scene.add(new THREE.HemisphereLight(0xffffff, 0x6d6957, 3));
     const light = new THREE.DirectionalLight(0xffffff, 3);
