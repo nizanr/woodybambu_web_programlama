@@ -140,7 +140,7 @@ function App() {
     );
     const keydown = (e) => {
       if (e.key === "Escape") {
-        setModal(null);
+        closeModal();
         return;
       }
       if (e.key !== "Tab") return;
@@ -184,6 +184,12 @@ function App() {
     [editRequest, setEditRequest] = useState(null),
     [tabRequest, setTabRequest] = useState(null);
   const staffModalShown = useRef(false);
+  // Yönetici personelin giriş ekranı: kapatılınca (kenara/×/Esc) satış analizi açılır.
+  const staffLanding = useRef(false);
+  const closeModal = () => {
+    if (staffLanding.current && modal === "account") openPanel("overview");
+    else setModal(null);
+  };
   const notify = (s) => { setToastHiding(false); setToast(s); };
   const isBuyer = user?.role === "customer";
   const isStaff = ["manager", "admin"].includes(user?.role);
@@ -191,6 +197,7 @@ function App() {
   const adminOnly = user?.role === "admin";
   const shownPage = adminOnly ? "admin" : page;
   const openPanel = (tab) => {
+    staffLanding.current = false;
     setTabRequest({ tab, n: Date.now() });
     setModal(null);
     setPage("admin");
@@ -201,9 +208,13 @@ function App() {
   useEffect(() => {
     if (user?.role === "manager" && !staffModalShown.current) {
       staffModalShown.current = true;
+      staffLanding.current = true;
       setModal("account");
     }
-    if (!user) staffModalShown.current = false;
+    if (!user) {
+      staffModalShown.current = false;
+      staffLanding.current = false;
+    }
   }, [user?.role]);
   const previewOn = settings?.preview.enabled !== false;
   const refreshProducts = () =>
@@ -450,6 +461,8 @@ function App() {
           href="#"
           onClick={(e) => {
             e.preventDefault();
+            staffLanding.current = false;
+            setModal(null);
             setPage("home");
             window.scrollTo(0, 0);
           }}
@@ -883,7 +896,7 @@ function App() {
         </Suspense>
       )}
       {modal && modal !== "studio" && (
-        <div className="overlay" onClick={() => setModal(null)}>
+        <div className="overlay" onClick={closeModal}>
           <section
             role="dialog"
             aria-modal="true"
@@ -893,7 +906,7 @@ function App() {
           >
             <button
               className="close icon"
-              onClick={() => setModal(null)}
+              onClick={closeModal}
               aria-label="Kapat"
             >
               ×
@@ -923,6 +936,7 @@ function App() {
                         setModal(null);
                       } else if (u.role === "manager") {
                         staffModalShown.current = true;
+                        staffLanding.current = true;
                         setModal("account");
                       } else setModal(afterLogin);
                       setAfterLogin(null);
