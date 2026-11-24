@@ -1,6 +1,6 @@
 # Woody Bambu
 
-Nisa Nur Çakır ve Zeynep Ulusoy'un öneri raporuna göre geliştirilen, fotoğraf üzerinde 3D mobilya yerleştirmeli bahçe mobilyası e-ticaret uygulaması.
+Nisa Nur Çakır ve Zeynep Ulusoy'un Web Programlama dersi için geliştirilen, fotoğraf üzerinde 3D mobilya yerleştirmeli bahçe mobilyası e-ticaret uygulaması.
 
 ## Çalıştırma
 
@@ -77,4 +77,4 @@ Görsel kaynakları: ana bahçe görseli bu proje için AI ile üretildi; ürün
 
 ## Canlı adres
 
-Uygulama Render üzerinde `woody-bambu` servisi olarak yayınlanır: https://woody-bambu.onrender.com (ücretsiz plan boşta uyur; ilk açılış 50 sn kadar sürebilir).
+Uygulama Render üzerinde `woody-bambu` servisi olarak yayınlanır: https://woody-bambu.onrender.com (ilk açılış 1dk kadar sürebilir).
