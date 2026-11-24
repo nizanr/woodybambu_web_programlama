@@ -1978,3 +1978,23 @@ label.check input {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+.swatches .swatch {
+  height: 16px;
+  width: 16px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid #faf9f6;
+  outline: 1px solid #d3d6cb;
+  cursor: pointer;
+}
+.swatches .swatch:disabled { cursor: default; }
+.swatches .swatch.on { outline: 2px solid #455147; }
+.swatches.large { gap: 8px; align-items: center; margin: 4px 0 12px; }
+.swatches.large .swatch { height: 26px; width: 26px; }
+.swatch-name { font-size: 0.85rem; color: #5b6358; }
+.color-editor { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.color-editor .chip { display: inline-flex; gap: 6px; align-items: center; border: 1px solid #d3d6cb; border-radius: 999px; padding: 4px 8px; }
+.dash-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin: 14px 0; }
+.dash-grid > div, .dash-card { background: #faf9f6; border: 1px solid #e3e5dc; border-radius: 14px; padding: 16px; }
+.dash-card ol { margin: 8px 0 0; padding-left: 20px; }

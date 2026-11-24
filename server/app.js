@@ -4,6 +4,7 @@ import MongoStore from "connect-mongo";
 import bcrypt from "bcryptjs";
 import Iyzipay from "iyzipay";
 import crypto from "node:crypto";
+import { notifyDiscord, orderEmbed } from "./discord.js";
 import mongoose from "mongoose";
 import {
   User,
@@ -19,6 +20,7 @@ import {
   Coupon,
   AuditLog,
   Notification,
+  ConsentLog,
   ROLES,
   PRODUCT_STATUSES,
 } from "./db.js";
@@ -29,6 +31,7 @@ import {
   priceSummary,
   canTransition,
   zonedDayStart,
+  toKurus,
 } from "./rules.js";
 import {
   recommend,
@@ -165,6 +168,8 @@ export function createApp(uri, { paymentClient } = {}) {
         productId: extra.productId || null,
         userId: extra.userId || req.session?.user?.id || null,
         orderId: extra.orderId || null,
+        page: extra.page,
+        durationSec: extra.durationSec,
         consentState: "granted",
         occurredAt: new Date(),
       });
@@ -233,12 +238,9 @@ export function createApp(uri, { paymentClient } = {}) {
     attempts.set(key, a);
     if (++a.count > 30)
       return fail(res, 429, "Çok fazla deneme. 10 dakika sonra tekrar deneyin.");
-    // Yalnızca giriş için ayrılmış "admin" kullanıcı adı istisnadır; üyelikte
-    // e-posta ve şifre kuralları aynen geçerlidir.
-    const adminAlias =
-      req.params.action === "login" &&
-      typeof email === "string" &&
-      email.trim().toLowerCase() === "admin";
+    // Yalnızca giriş için ayrılmış personel kullanıcı adları ("admin",
+    // "woodybambu") istisnadır; üyelikte e-posta ve şifre kuralları aynen geçerlidir.
+    const adminAlias = req.params.action === "login" && isStaffAlias(email);
     if (!adminAlias) {
       if (typeof email !== "string" || !/^\S+@\S+\.\S+$/.test(email.trim()))
         return fail(res, 400, MSG.VAL001);
@@ -308,6 +310,7 @@ export function createApp(uri, { paymentClient } = {}) {
   app.post("/api/consent", (req, res) => {
     if (typeof req.body.analytics !== "boolean")
       return fail(res, 400, "Tercih belirtilmeli");
+    ConsentLog.create({ analytics: req.body.analytics }).catch(() => {});
     req.session.analyticsConsent = req.body.analytics;
     req.session.analyticsSid = req.body.analytics
       ? req.session.analyticsSid || crypto.randomUUID()
@@ -368,6 +371,7 @@ export function createApp(uri, { paymentClient } = {}) {
       productId: p.id,
       name: p.name,
       color: p.color,
+      colors: p.colors,
       model3dUrl: p.model3dUrl,
       price: p.price,
       stock: p.stock,
@@ -386,9 +390,27 @@ export function createApp(uri, { paymentClient } = {}) {
     res.json(recommend(products.map((p) => p.toJSON()), width, depth));
   });
 
-  /* ─── İstemci kaynaklı analitik olayı: yalnızca product_view ─── */
+  /* ─── İstemci kaynaklı analitik olayı: product_view ve dwell ─── */
+  const DWELL_PAGES = ["home", "catalog", "product", "studio", "balcony", "cart", "other"];
   app.post("/api/events", async (req, res) => {
     const { eventType, productId, eventId } = req.body;
+    if (eventType === "dwell") {
+      // Sitede geçirilen süre: yalnızca izinli oturumlar için kaydedilir.
+      const { page, durationSec } = req.body;
+      if (
+        !DWELL_PAGES.includes(page) ||
+        !Number.isFinite(durationSec) ||
+        durationSec < 1 ||
+        (productId !== undefined && productId !== null && !isId(productId))
+      )
+        return fail(res, 400, "Geçersiz olay");
+      const recorded = await trackEvent(req, "dwell", {
+        page,
+        durationSec: Math.min(Math.round(durationSec), 1800),
+        productId: productId || null,
+      });
+      return res.status(recorded ? 201 : 202).json({ recorded });
+    }
     if (eventType !== "product_view" || !isId(productId))
       return fail(res, 400, "Geçersiz olay");
     if (eventId !== undefined && (typeof eventId !== "string" || eventId.length > 64))
@@ -403,6 +425,15 @@ export function createApp(uri, { paymentClient } = {}) {
   });
 
   /* ─── Sepet (FR-005/006/007, BR-004, VAL-003/004) ─── */
+  // Renk: ürünün tanımlı seçeneklerinden biri olmalı. undefined → seçim yok,
+  // false → geçersiz.
+  const colorFor = (p, hex) => {
+    if (hex === undefined || hex === null || hex === "") return undefined;
+    if (typeof hex !== "string") return false;
+    return (p?.colors || []).some((c) => c.hex.toLowerCase() === hex.toLowerCase())
+      ? hex.toLowerCase()
+      : false;
+  };
   const loadCart = async (userId) =>
     (await Cart.findOne({ userId })) ||
     new Cart({ userId, items: [] });
@@ -425,6 +456,8 @@ export function createApp(uri, { paymentClient } = {}) {
               price: p.price,
               stock: p.stock,
               image: p.image,
+              color: i.color,
+              colorName: p.colors?.find((c) => c.hex.toLowerCase() === i.color)?.name,
               isActive: p.status === "published",
             }
           : null;
@@ -461,8 +494,12 @@ export function createApp(uri, { paymentClient } = {}) {
     const next = (line?.quantity || 0) + add;
     const err = checkLine(p, next);
     if (err) return fail(res, 409, err);
-    if (line) line.quantity = next;
-    else cart.items.push({ productId, quantity: next });
+    const color = colorFor(p, req.body.color);
+    if (color === false) return fail(res, 400, "Geçersiz renk seçimi");
+    if (line) {
+      line.quantity = next;
+      if (color) line.color = color;
+    } else cart.items.push({ productId, quantity: next, color: color || undefined });
     await cart.save();
     await trackEvent(req, "add_to_cart", { productId });
     res.json(await cartView(cart));
@@ -568,6 +605,7 @@ export function createApp(uri, { paymentClient } = {}) {
       items = (await loadCart(req.currentUser._id)).items.map((i) => ({
         id: String(i.productId),
         quantity: i.quantity,
+        color: i.color,
       }));
     if (!Array.isArray(items) || !items.length || items.length > 30)
       return fail(res, 400, "Sepetiniz boş");
@@ -591,7 +629,17 @@ export function createApp(uri, { paymentClient } = {}) {
         return fail(res, 409, MSG.VAL004, { productId: i.id });
       if (p.stock < i.quantity)
         return fail(res, 409, MSG.VAL003, { productId: i.id });
-      lines.push({ id: p.id, name: p.name, price: p.price, quantity: i.quantity });
+      const color = colorFor(p, i.color);
+      if (color === false) return fail(res, 400, "Geçersiz renk seçimi");
+      lines.push({
+        id: p.id,
+        name: p.name,
+        price: p.price,
+        quantity: i.quantity,
+        ...(color
+          ? { color, colorName: p.colors.find((c) => c.hex.toLowerCase() === color)?.name }
+          : {}),
+      });
     }
     if (iyzico && !appUrl)
       return fail(res, 503, "Ödeme için APP_URL ayarlanmalı");
@@ -774,6 +822,7 @@ export function createApp(uri, { paymentClient } = {}) {
       `${orderNo(o)} siparişiniz alındı. Sipariş detayları hesabınızda.`,
     );
     await notifyStaff("order_created", `${orderNo(o)} numaralı yeni sipariş oluşturuldu.`);
+    notifyDiscord(orderEmbed(done || o, orderNo(o), appUrl));
     const s = await getSettings();
     for (const [, p] of applied)
       if (p.stock <= s.commerce.lowStockThreshold)
@@ -985,6 +1034,18 @@ export function createApp(uri, { paymentClient } = {}) {
   );
   const MODEL_URL =
     /^(|builtin:(chair|sofa|table|lounger)|https:\/\/[^\s"'<>]+\.(glb|gltf)(\?[^\s"'<>]*)?)$/;
+  const validColors = (c) =>
+    c === undefined ||
+    (Array.isArray(c) &&
+      c.length <= 8 &&
+      c.every(
+        (x) =>
+          x &&
+          typeof x.name === "string" &&
+          x.name.trim() &&
+          x.name.length <= 30 &&
+          /^#[0-9a-fA-F]{6}$/.test(x.hex),
+      ));
   const productError = (p) => {
     if (
       !Number.isFinite(p.price) ||
@@ -1007,7 +1068,8 @@ export function createApp(uri, { paymentClient } = {}) {
       !MODEL_URL.test(p.model3dUrl ?? "") ||
       (p.color !== undefined && p.color !== null && !/^#[0-9a-fA-F]{6}$/.test(p.color)) ||
       (p.description !== undefined && p.description !== null && (typeof p.description !== "string" || p.description.length > 1000)) ||
-      ![p.widthCm, p.depthCm, p.heightCm].every(validProductSize)
+      ![p.widthCm, p.depthCm, p.heightCm].every(validProductSize) ||
+      !validColors(p.colors)
     )
       return MSG.VAL013;
     return null;
@@ -1026,6 +1088,7 @@ export function createApp(uri, { paymentClient } = {}) {
     "image",
     "description",
     "color",
+    "colors",
     "model3dUrl",
     "widthCm",
     "depthCm",
@@ -1131,6 +1194,7 @@ export function createApp(uri, { paymentClient } = {}) {
     preparing: "Hazırlanıyor",
     shipped: "Kargolandı",
     delivered: "Teslim edildi",
+    returned: "İade edildi",
   };
   app.patch("/api/admin/orders/:id", auth, roles(...STAFF), async (req, res) => {
     if (!isId(req.params.id)) return res.sendStatus(404);
@@ -1148,6 +1212,9 @@ export function createApp(uri, { paymentClient } = {}) {
     );
     if (!updated) return fail(res, 409, MSG.VAL014);
     await audit(req, "order_status", o.id, from, updated.status);
+    notifyDiscord({
+      content: `${orderNo(o)} siparişi: ${STATUS_TEXT[updated.status] || updated.status} (${req.currentUser.name})`,
+    });
     await notifyUser(
       o.user,
       "order_status",
@@ -1334,6 +1401,80 @@ export function createApp(uri, { paymentClient } = {}) {
       products,
     };
   };
+  /* ─── Panel özeti: aylık sipariş/ciro, en çok satan, iade ve (admin) site davranışı ─── */
+  app.get("/api/admin/dashboard", auth, roles(...STAFF), async (req, res) => {
+    const s = await getSettings();
+    const tz = s.analytics.reportTimezone;
+    const nowYm = new Date().toLocaleDateString("sv-SE", { timeZone: tz }).slice(0, 7);
+    const ym = /^\d{4}-(0[1-9]|1[0-2])$/.test(req.query.month || "") ? req.query.month : nowYm;
+    const [y, m] = ym.split("-").map(Number);
+    const next = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, "0")}`;
+    const start = zonedDayStart(ym + "-01", tz);
+    const end = zonedDayStart(next + "-01", tz);
+    const sold = ["paid", "demo_paid", "preparing", "shipped", "delivered"];
+    const orders = await Order.find({
+      status: { $in: [...sold, "returned"] },
+      createdAt: { $gte: start, $lt: end },
+    }).lean();
+    const tally = (list) => {
+      const map = new Map();
+      for (const o of list)
+        for (const i of o.items) {
+          const r = map.get(i.id) || { productId: i.id, name: i.name, quantity: 0 };
+          r.quantity += i.quantity;
+          map.set(i.id, r);
+        }
+      return [...map.values()].sort((a, b) => b.quantity - a.quantity);
+    };
+    const kept = orders.filter((o) => sold.includes(o.status));
+    const out = {
+      month: ym,
+      timezone: tz,
+      orderCount: kept.length,
+      awaitingShipment: orders.filter((o) => ["paid", "demo_paid", "preparing"].includes(o.status)).length,
+      topProducts: tally(kept).slice(0, 5),
+      returnedCount: orders.filter((o) => o.status === "returned").length,
+      returnedProducts: tally(orders.filter((o) => o.status === "returned")).slice(0, 5),
+    };
+    if (req.currentUser.role === "admin") {
+      const revenue = (list) => Math.round(list.reduce((a, o) => a + toKurus(o.total), 0)) / 100;
+      out.revenue = revenue(kept);
+      out.returnedAmount = revenue(orders.filter((o) => o.status === "returned"));
+      const [accepted, rejected] = await Promise.all([
+        ConsentLog.countDocuments({ analytics: true, at: { $gte: start, $lt: end } }),
+        ConsentLog.countDocuments({ analytics: false, at: { $gte: start, $lt: end } }),
+      ]);
+      const dwell = await Event.find({
+        eventType: "dwell",
+        occurredAt: { $gte: start, $lt: end },
+      }).lean();
+      const group = (keyFn) => {
+        const map = new Map();
+        for (const e of dwell) {
+          const k = keyFn(e);
+          if (!k) continue;
+          const r = map.get(k) || { key: k, totalSec: 0, visits: 0 };
+          r.totalSec += e.durationSec || 0;
+          r.visits++;
+          map.set(k, r);
+        }
+        return [...map.values()]
+          .map((r) => ({ ...r, avgSec: Math.round(r.totalSec / r.visits) }))
+          .sort((a, b) => b.totalSec - a.totalSec);
+      };
+      const byProduct = group((e) => e.productId && String(e.productId)).slice(0, 10);
+      const names = await Product.find({ _id: { $in: byProduct.map((r) => r.key) } })
+        .select("name")
+        .lean();
+      out.consent = { accepted, rejected };
+      out.dwellByPage = group((e) => e.page);
+      out.dwellByProduct = byProduct.map((r) => ({
+        ...r,
+        name: names.find((n) => String(n._id) === r.key)?.name || "Silinmiş ürün",
+      }));
+    }
+    res.json(out);
+  });
   app.get("/api/reports/summary", auth, roles(...STAFF), async (req, res) => {
     const r = await reportData(req);
     if (r.error) return fail(res, 400, r.error);

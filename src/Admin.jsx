@@ -9,6 +9,7 @@ import {
 } from "./util.js";
 
 const STAFF_TABS = [
+  ["overview", "Özet"],
   ["products", "Ürünler"],
   ["categories", "Kategoriler"],
   ["orders", "Siparişler"],
@@ -29,10 +30,19 @@ const isoDay = (offset = 0) =>
     timeZone: "Europe/Istanbul",
   });
 
-export default function Admin({ user, api, notify, refresh }) {
+export default function Admin({ user, api, notify, refresh, editRequest }) {
   const [data, setData] = useState(null),
-    [tab, setTab] = useState("products"),
+    [tab, setTab] = useState(editRequest ? "products" : "overview"),
     [editing, setEditing] = useState(null);
+  // Katalogdaki "Düzenle" düğmesinden gelen ürünü forma yükler.
+  useEffect(() => {
+    if (!editRequest || !data) return;
+    const p = data.products.find((x) => x._id === editRequest.id);
+    if (p) {
+      setTab("products");
+      setEditing(p);
+    }
+  }, [editRequest?.n, data]);
   const load = () =>
     api("/api/admin")
       .then(setData)
@@ -90,6 +100,7 @@ export default function Admin({ user, api, notify, refresh }) {
               <h2>{data.products.filter((p) => p.stock <= 3).length}</h2>
             </div>
           </div>
+          {tab === "overview" && <Overview api={api} isAdmin={isAdmin} notify={notify} />}
           {tab === "products" && (
             <Products
               data={data}
@@ -115,6 +126,8 @@ export default function Admin({ user, api, notify, refresh }) {
 }
 
 function Products({ data, editing, setEditing, send }) {
+  const [colors, setColors] = useState(editing?.colors || []);
+  useEffect(() => setColors(editing?.colors || []), [editing]);
   const modelValue = editing?.model3dUrl ?? "builtin:chair";
   const [modelKind, setModelKind] = useState(
     modelValue.startsWith("https://") ? "url" : modelValue,
@@ -136,6 +149,7 @@ function Products({ data, editing, setEditing, send }) {
           f.stock = +f.stock;
           // Boş ölçü: türe göre varsayılan kullanılır (FR-034).
           for (const k of ["widthCm", "depthCm", "heightCm"]) f[k] = f[k] === "" ? null : +f[k];
+          f.colors = colors.filter((c) => c.name.trim());
           f.model3dUrl = modelKind === "url" ? f.modelUrl.trim() : modelKind;
           delete f.modelUrl;
           const r = await send(
@@ -230,6 +244,38 @@ function Products({ data, editing, setEditing, send }) {
           Model rengi
           <input name="color" type="color" defaultValue={editing?.color || "#b79b77"} />
         </label>
+        <div className="color-editor">
+          <strong>Renk seçenekleri</strong>
+          {colors.map((c, i) => (
+            <span className="chip" key={i}>
+              <input
+                type="color"
+                value={c.hex}
+                aria-label="Renk"
+                onChange={(e) =>
+                  setColors(colors.map((x, j) => (j === i ? { ...x, hex: e.target.value } : x)))
+                }
+              />
+              <input
+                value={c.name}
+                maxLength="30"
+                placeholder="Renk adı"
+                aria-label="Renk adı"
+                onChange={(e) =>
+                  setColors(colors.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))
+                }
+              />
+              <button type="button" onClick={() => setColors(colors.filter((_, j) => j !== i))} aria-label="Rengi sil">
+                ×
+              </button>
+            </span>
+          ))}
+          {colors.length < 8 && (
+            <button type="button" onClick={() => setColors([...colors, { name: "", hex: "#b79b77" }])}>
+              + Renk ekle
+            </button>
+          )}
+        </div>
         {[
           ["widthCm", "En (cm)"],
           ["depthCm", "Derinlik (cm)"],
@@ -364,6 +410,17 @@ function Orders({ data, send }) {
         {istanbulDate(o.createdAt)} ·{" "}
         {o.paymentMode === "iyzico" ? "iyzico" : "Demo ödeme"}
       </small>
+      {o.status === "delivered" && (
+        <button
+          className="secondary"
+          onClick={() =>
+            confirm("Bu sipariş iade edildi olarak işaretlensin mi?") &&
+            send("/api/admin/orders/" + o._id, "PATCH", { status: "returned" })
+          }
+        >
+          İade alındı olarak işaretle
+        </button>
+      )}
       {NEXT_STATUS[o.status] && (
         <button
           className="secondary"
@@ -770,5 +827,99 @@ function Audit({ api, notify }) {
         </tbody>
       </table>
     </div>
+  );
+}
+
+const fmtSec = (s) => (s >= 60 ? `${Math.floor(s / 60)} dk ${s % 60} sn` : `${s} sn`);
+const PAGE_LABELS = {
+  home: "Ana sayfa",
+  product: "Ürün detayı",
+  studio: "3D stüdyo",
+  cart: "Sepet",
+  balcony: "Balkon önerisi",
+  catalog: "Katalog",
+  other: "Diğer sayfalar",
+};
+function Overview({ api, isAdmin, notify }) {
+  const [month, setMonth] = useState("");
+  const [d, setD] = useState(null);
+  useEffect(() => {
+    api("/api/admin/dashboard" + (month ? "?month=" + month : ""))
+      .then(setD)
+      .catch((e) => notify(e.message));
+  }, [month]);
+  if (!d) return <p>Yükleniyor…</p>;
+  const List = ({ rows, unit = "adet" }) =>
+    rows.length ? (
+      <ol>
+        {rows.map((r) => (
+          <li key={r.productId || r.key}>
+            {r.name || PAGE_LABELS[r.key] || r.key} — {r.quantity ?? fmtSec(r.totalSec)} {r.quantity != null ? unit : ""}
+            {r.avgSec != null && ` · ort. ${fmtSec(r.avgSec)} (${r.visits} ziyaret)`}
+          </li>
+        ))}
+      </ol>
+    ) : (
+      <p>Veri yok.</p>
+    );
+  return (
+    <>
+      <label>
+        Ay
+        <input type="month" value={month || d.month} onChange={(e) => setMonth(e.target.value)} />
+      </label>
+      <div className="dash-grid">
+        <div>
+          <small>BU AYKİ SİPARİŞ</small>
+          <h2>{d.orderCount}</h2>
+        </div>
+        <div>
+          <small>KARGO BEKLEYEN</small>
+          <h2>{d.awaitingShipment}</h2>
+        </div>
+        <div>
+          <small>İADE EDİLEN SİPARİŞ</small>
+          <h2>{d.returnedCount}</h2>
+        </div>
+        {isAdmin && (
+          <>
+            <div>
+              <small>AYLIK TOPLAM CİRO</small>
+              <h2>{money(d.revenue)}</h2>
+              {d.returnedAmount > 0 && <small>İade: {money(d.returnedAmount)}</small>}
+            </div>
+            <div>
+              <small>ÇEREZ İZNİ (KABUL / RED)</small>
+              <h2>
+                {d.consent.accepted} / {d.consent.rejected}
+              </h2>
+            </div>
+          </>
+        )}
+      </div>
+      <div className="dash-grid">
+        <div className="dash-card">
+          <strong>En çok satın alınan ürünler</strong>
+          <List rows={d.topProducts} />
+        </div>
+        <div className="dash-card">
+          <strong>İade edilen ürünler</strong>
+          <List rows={d.returnedProducts} />
+        </div>
+        {isAdmin && (
+          <>
+            <div className="dash-card">
+              <strong>Sitede en çok vakit geçirilen yerler</strong>
+              <List rows={d.dwellByPage} />
+              <small>Yalnızca çerez izni veren ziyaretçiler; toplam süreye göre.</small>
+            </div>
+            <div className="dash-card">
+              <strong>En çok vakit geçirilen ürünler</strong>
+              <List rows={d.dwellByProduct} />
+            </div>
+          </>
+        )}
+      </div>
+    </>
   );
 }

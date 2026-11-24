@@ -128,6 +128,7 @@ export const ORDER_TRANSITIONS = {
   demo_paid: ["preparing"],
   preparing: ["shipped"],
   shipped: ["delivered"],
+  delivered: ["returned"],
 };
 export const canTransition = (from, to) =>
   (ORDER_TRANSITIONS[from] || []).includes(to);

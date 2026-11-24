@@ -4,6 +4,7 @@ import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 import { User } from "../server/db.js";
 import { bootstrapAdmin } from "../server/bootstrap-admin.js";
+import { seedDemoStaff } from "../server/demo-staff.js";
 import { testUri, stopMemory } from "./helpers/mongo.js";
 before(async () => {
   await mongoose.connect(await testUri("bahceni_bootstrap_test"));
@@ -72,4 +73,23 @@ test("bootstrap cannot create a second admin", async () => {
     }),
   );
   assert.equal(await User.countDocuments({ role: "admin" }), 1);
+});
+
+test("demo staff accounts: admin and woodybambu with their own roles", async () => {
+  await User.deleteMany({});
+  await seedDemoStaff({});
+  const a = await User.findOne({ email: "admin" });
+  const m = await User.findOne({ email: "woodybambu" });
+  assert.equal(a.role, "admin");
+  assert.equal(m.role, "manager");
+  assert.ok(await bcrypt.compare("0", a.password));
+  assert.ok(await bcrypt.compare("0", m.password));
+});
+test("demo staff seeding never overwrites and can be turned off", async () => {
+  const before = await User.findOne({ email: "woodybambu" });
+  await seedDemoStaff({});
+  assert.equal((await User.findOne({ email: "woodybambu" })).password, before.password);
+  await User.deleteMany({});
+  await seedDemoStaff({ DEMO_STAFF: "off" });
+  assert.equal(await User.countDocuments(), 0);
 });
