@@ -5,6 +5,7 @@ import bcrypt from "bcryptjs";
 import Iyzipay from "iyzipay";
 import crypto from "node:crypto";
 import { notifyDiscord, orderEmbed } from "./discord.js";
+import { isStaffAlias } from "./demo-staff.js";
 import mongoose from "mongoose";
 import {
   User,
