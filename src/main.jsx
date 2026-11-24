@@ -190,18 +190,19 @@ function App() {
   // Admin sitenin müşteri yüzünü görmez; yalnızca yönetim paneli açılır.
   const adminOnly = user?.role === "admin";
   const shownPage = adminOnly ? "admin" : page;
+  const panelView = shownPage === "admin";
   const openPanel = (tab) => {
     setTabRequest({ tab, n: Date.now() });
     setModal(null);
     setPage("admin");
     window.scrollTo(0, 0);
   };
-  // Yönetici personel: site müşteri görünümünde açılsa bile bildirim/hesap
-  // penceresi giriş yapınca ve sayfa yenilenince kendiliğinden açılır.
+  // Yönetici personel: giriş yapınca ve sayfa yenilenince müşteri sitesi yerine
+  // doğrudan gelen siparişler ekranı açılır. Marka simgesi müşteri sitesini açar.
   useEffect(() => {
     if (user?.role === "manager" && !staffModalShown.current) {
       staffModalShown.current = true;
-      setModal("account");
+      openPanel("orders");
     }
     if (!user) staffModalShown.current = false;
   }, [user?.role]);
@@ -436,7 +437,7 @@ function App() {
   };
   return (
     <>
-      <div className="announcement" hidden={adminOnly}>
+      <div className="announcement" hidden={panelView}>
         Doğanın içinde, evinizin konforunda.{" "}
         <span>
           {settings?.commerce.freeShipThreshold > 0
@@ -459,7 +460,7 @@ function App() {
             woody<span className="brand-bottom">bambu.</span>
           </span>
         </a>
-        <nav hidden={adminOnly}>
+        <nav hidden={panelView}>
           <button
             className={page === "home" ? "active" : ""}
             onClick={collection}
@@ -485,7 +486,7 @@ function App() {
         <div className="nav-actions">
           <button
             className="icon search-icon"
-            hidden={adminOnly}
+            hidden={panelView}
             aria-label="Ürün ara"
             onClick={() => {
               collection();
@@ -494,6 +495,11 @@ function App() {
           >
             ⌕
           </button>
+          {user?.role === "manager" && !panelView && (
+            <button className="secondary" onClick={() => openPanel("orders")}>
+              ← Yönetim paneli
+            </button>
+          )}
           <button
             className="account"
             aria-label={user ? `Hesabım (${user.name})` : "Hesabım / giriş yap"}
@@ -793,7 +799,7 @@ function App() {
           </section>
         </main>
       )}
-      <footer hidden={adminOnly}>
+      <footer hidden={panelView}>
         <div className="footer-top">
           <div>
             <a className="brand">
@@ -923,7 +929,7 @@ function App() {
                         setModal(null);
                       } else if (u.role === "manager") {
                         staffModalShown.current = true;
-                        setModal("account");
+                        openPanel("orders");
                       } else setModal(afterLogin);
                       setAfterLogin(null);
                       notify("Hoş geldin, " + u.name);
