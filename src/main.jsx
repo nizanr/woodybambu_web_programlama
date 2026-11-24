@@ -181,9 +181,30 @@ function App() {
     [visible, setVisible] = useState(8),
     [afterLogin, setAfterLogin] = useState(null),
     [picked, setPicked] = useState({}),
-    [editRequest, setEditRequest] = useState(null);
+    [editRequest, setEditRequest] = useState(null),
+    [tabRequest, setTabRequest] = useState(null);
+  const staffModalShown = useRef(false);
   const notify = (s) => { setToastHiding(false); setToast(s); };
-  const isBuyer = ["customer", "admin"].includes(user?.role);
+  const isBuyer = user?.role === "customer";
+  const isStaff = ["manager", "admin"].includes(user?.role);
+  // Admin sitenin müşteri yüzünü görmez; yalnızca yönetim paneli açılır.
+  const adminOnly = user?.role === "admin";
+  const shownPage = adminOnly ? "admin" : page;
+  const openPanel = (tab) => {
+    setTabRequest({ tab, n: Date.now() });
+    setModal(null);
+    setPage("admin");
+    window.scrollTo(0, 0);
+  };
+  // Yönetici personel: site müşteri görünümünde açılsa bile bildirim/hesap
+  // penceresi giriş yapınca ve sayfa yenilenince kendiliğinden açılır.
+  useEffect(() => {
+    if (user?.role === "manager" && !staffModalShown.current) {
+      staffModalShown.current = true;
+      setModal("account");
+    }
+    if (!user) staffModalShown.current = false;
+  }, [user?.role]);
   const previewOn = settings?.preview.enabled !== false;
   const refreshProducts = () =>
     api("/api/products").then(setProducts).catch(() => {});
@@ -228,7 +249,7 @@ function App() {
     }
   };
   const trackView = (p) => {
-    if (consent !== true || !settings?.analytics.optionalAnalytics) return;
+    if (consent !== true || !settings?.analytics.optionalAnalytics || isStaff) return;
     api("/api/events", {
       method: "POST",
       body: JSON.stringify({
@@ -244,7 +265,7 @@ function App() {
     modal === "studio" ? "studio" : modal === "detail" ? "product" : modal === "cart" ? "cart"
     : page === "home" ? "home" : "other";
   const dwellProduct = ["studio", "detail"].includes(modal) ? selected?._id : undefined;
-  const dwellOn = consent === true && settings?.analytics.optionalAnalytics;
+  const dwellOn = consent === true && settings?.analytics.optionalAnalytics && !isStaff;
   useEffect(() => {
     if (!dwellOn) return;
     let since = performance.now();
@@ -415,7 +436,7 @@ function App() {
   };
   return (
     <>
-      <div className="announcement">
+      <div className="announcement" hidden={adminOnly}>
         Doğanın içinde, evinizin konforunda.{" "}
         <span>
           {settings?.commerce.freeShipThreshold > 0
@@ -438,7 +459,7 @@ function App() {
             woody<span className="brand-bottom">bambu.</span>
           </span>
         </a>
-        <nav>
+        <nav hidden={adminOnly}>
           <button
             className={page === "home" ? "active" : ""}
             onClick={collection}
@@ -464,6 +485,7 @@ function App() {
         <div className="nav-actions">
           <button
             className="icon search-icon"
+            hidden={adminOnly}
             aria-label="Ürün ara"
             onClick={() => {
               collection();
@@ -479,7 +501,7 @@ function App() {
           >
             ♙ <span>{user ? user.name.split(" ")[0] : "Hesabım"}</span>
           </button>
-          <button className="cart-btn" onClick={() => setModal("cart")}>
+          <button className="cart-btn" hidden={isStaff} onClick={() => setModal("cart")}>
             Sepet <span>{count}</span>
           </button>
         </div>
@@ -490,10 +512,11 @@ function App() {
           <button onClick={() => location.reload()}>Tekrar dene</button>
         </div>
       )}
-      {page === "admin" ? (
+      {shownPage === "admin" ? (
         <Suspense fallback={<main className="admin">Yükleniyor…</main>}>
           <Admin
             editRequest={editRequest}
+            tabRequest={tabRequest}
             user={user}
             api={api}
             notify={notify}
@@ -770,7 +793,7 @@ function App() {
           </section>
         </main>
       )}
-      <footer>
+      <footer hidden={adminOnly}>
         <div className="footer-top">
           <div>
             <a className="brand">
@@ -797,7 +820,7 @@ function App() {
             <button onClick={() => setModal(user ? "account" : "login")}>
               Giriş / Üyelik
             </button>
-            <button onClick={openOrders}>Siparişlerim</button>
+            {!isStaff && <button onClick={openOrders}>Siparişlerim</button>}
           </div>
           <div>
             <strong>Birlikte tasarlayalım.</strong>
@@ -812,7 +835,7 @@ function App() {
           <span>Web Programlama Projesi · Nisa Nur Çakır & Zeynep Ulusoy</span>
         </div>
       </footer>
-      {settings?.analytics.optionalAnalytics && consent === null && (
+      {settings?.analytics.optionalAnalytics && consent === null && !isStaff && (
         <div className="consent" role="region" aria-label="Analitik izni">
           <p>
             Ürünleri nasıl incelediğinizi anonim olarak ölçmek için izninizi
@@ -895,7 +918,13 @@ function App() {
                         ),
                       });
                       setUser(u);
-                      setModal(afterLogin);
+                      if (u.role === "admin") {
+                        setPage("admin");
+                        setModal(null);
+                      } else if (u.role === "manager") {
+                        staffModalShown.current = true;
+                        setModal("account");
+                      } else setModal(afterLogin);
                       setAfterLogin(null);
                       notify("Hoş geldin, " + u.name);
                     } catch (e) {
@@ -964,16 +993,25 @@ function App() {
                 <p>{user.email}</p>
                 <span className="badge">{ROLE_LABELS[user.role] || user.role}</span>
                 <div className="account-actions">
-                  <button className="primary" onClick={openOrders}>
-                    Siparişlerim
-                  </button>
-                  {["manager", "admin"].includes(user.role) && (
+                  {!isStaff && (
+                    <button className="primary" onClick={openOrders}>
+                      Siparişlerim
+                    </button>
+                  )}
+                  {user.role === "manager" && (
+                    <>
+                      <button className="primary" onClick={() => openPanel("orders")}>
+                        Gelen siparişler
+                      </button>
+                      <button className="secondary" onClick={() => openPanel("overview")}>
+                        Satış analizi
+                      </button>
+                    </>
+                  )}
+                  {isStaff && (
                     <button
-                      className="secondary"
-                      onClick={() => {
-                        setModal(null);
-                        setPage("admin");
-                      }}
+                      className={user.role === "admin" ? "primary" : "secondary"}
+                      onClick={() => openPanel(user.role === "admin" ? "overview" : "products")}
                     >
                       Yönetim paneli
                     </button>
@@ -1038,7 +1076,7 @@ function App() {
                     notify={notify}
                   />
                 </details>
-                {settings?.analytics.optionalAnalytics && (
+                {settings?.analytics.optionalAnalytics && !isStaff && (
                   <label className="check">
                     <input
                       type="checkbox"

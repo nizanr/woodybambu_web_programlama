@@ -30,10 +30,13 @@ const isoDay = (offset = 0) =>
     timeZone: "Europe/Istanbul",
   });
 
-export default function Admin({ user, api, notify, refresh, editRequest }) {
+export default function Admin({ user, api, notify, refresh, editRequest, tabRequest }) {
   const [data, setData] = useState(null),
-    [tab, setTab] = useState(editRequest ? "products" : "overview"),
+    [tab, setTab] = useState(editRequest ? "products" : tabRequest?.tab || "overview"),
     [editing, setEditing] = useState(null);
+  useEffect(() => {
+    if (tabRequest?.tab) setTab(tabRequest.tab);
+  }, [tabRequest?.n]);
   // Katalogdaki "Düzenle" düğmesinden gelen ürünü forma yükler.
   useEffect(() => {
     if (!editRequest || !data) return;
