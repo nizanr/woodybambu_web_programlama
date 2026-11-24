@@ -42,6 +42,7 @@ export default function Studio({
   notify,
   onClose,
   onAddToCart,
+  pickedColors,
   onLoginRequest,
   settings,
 }) {
@@ -147,7 +148,7 @@ export default function Studio({
       let model;
       try {
         model = info.model3dUrl.startsWith("builtin:")
-          ? buildBuiltin(info.model3dUrl.slice(8), info.color)
+          ? buildBuiltin(info.model3dUrl.slice(8), pickedColors?.[product._id] || info.color)
           : await loadGltf(info.model3dUrl, Math.max(preview.loadTargetSec, 1) * 2000);
       } catch {
         if (!cancelled) {

@@ -179,7 +179,9 @@ function App() {
     [notifications, setNotifications] = useState([]),
     [coupon, setCoupon] = useState(""),
     [visible, setVisible] = useState(8),
-    [afterLogin, setAfterLogin] = useState(null);
+    [afterLogin, setAfterLogin] = useState(null),
+    [picked, setPicked] = useState({}),
+    [editRequest, setEditRequest] = useState(null);
   const notify = (s) => { setToastHiding(false); setToast(s); };
   const isBuyer = ["customer", "admin"].includes(user?.role);
   const previewOn = settings?.preview.enabled !== false;
@@ -236,6 +238,50 @@ function App() {
       }),
     }).catch(() => {});
   };
+  /* Sitede geçirilen süre: yalnızca analitik izni verilmişse, sayfa/ürün
+     değiştiğinde veya sekme gizlenirken gönderilir (BR-015). */
+  const dwellKey =
+    modal === "studio" ? "studio" : modal === "detail" ? "product" : modal === "cart" ? "cart"
+    : page === "home" ? "home" : "other";
+  const dwellProduct = ["studio", "detail"].includes(modal) ? selected?._id : undefined;
+  const dwellOn = consent === true && settings?.analytics.optionalAnalytics;
+  useEffect(() => {
+    if (!dwellOn) return;
+    let since = performance.now();
+    const flush = () => {
+      const sec = Math.round((performance.now() - since) / 1000);
+      since = performance.now();
+      if (sec < 1) return;
+      const body = JSON.stringify({
+        eventType: "dwell",
+        page: dwellKey,
+        durationSec: sec,
+        ...(dwellProduct ? { productId: dwellProduct } : {}),
+      });
+      const sent = navigator.sendBeacon?.(
+        "/api/events",
+        new Blob([body], { type: "application/json" }),
+      );
+      if (!sent)
+        fetch("/api/events", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body,
+          keepalive: true,
+        }).catch(() => {});
+    };
+    const onHide = () => {
+      if (document.visibilityState === "hidden") flush();
+      else since = performance.now();
+    };
+    document.addEventListener("visibilitychange", onHide);
+    window.addEventListener("pagehide", flush);
+    return () => {
+      document.removeEventListener("visibilitychange", onHide);
+      window.removeEventListener("pagehide", flush);
+      flush();
+    };
+  }, [dwellOn, dwellKey, dwellProduct]);
   const openDetail = (p) => {
     setModal("detail");
     setSelected(p);
@@ -265,7 +311,10 @@ function App() {
       setCart(
         await api("/api/cart/items", {
           method: "POST",
-          body: JSON.stringify({ productId: p._id }),
+          body: JSON.stringify({
+            productId: p._id,
+            ...(picked[p._id] ? { color: picked[p._id] } : {}),
+          }),
         }),
       );
       notify("Ürün sepetinize eklendi");
@@ -444,6 +493,7 @@ function App() {
       {page === "admin" ? (
         <Suspense fallback={<main className="admin">Yükleniyor…</main>}>
           <Admin
+            editRequest={editRequest}
             user={user}
             api={api}
             notify={notify}
@@ -627,6 +677,18 @@ function App() {
                     <span className="product-tag">
                       {i === 0 ? "ÇOK SEVİLEN" : "DOĞAL DOKULAR"}
                     </span>
+                    {["manager", "admin"].includes(user?.role) && (
+                      <button
+                        className="try-btn staff-edit"
+                        style={{ top: 12, bottom: "auto", left: 12 }}
+                        onClick={() => {
+                          setEditRequest({ id: p._id, n: Date.now() });
+                          setPage("admin");
+                        }}
+                      >
+                        ✎ Düzenle
+                      </button>
+                    )}
                     <button
                       className="quick-add"
                       onClick={() => add(p)}
@@ -657,11 +719,7 @@ function App() {
                     </h3>
                     <div className="price-row">
                       <span>{money(p.price)}</span>
-                      <span className="swatches">
-                        <i style={{ background: p.color }} />
-                        <i style={{ background: "#455147" }} />
-                        <i style={{ background: "#dfd5c5" }} />
-                      </span>
+                      <Swatches p={p} picked={picked} setPicked={setPicked} />
                     </div>
                   </div>
                 </article>
@@ -785,6 +843,7 @@ function App() {
         >
           <Studio
             product={selected}
+            pickedColors={picked}
             products={products}
             user={user}
             api={api}
@@ -821,7 +880,7 @@ function App() {
                 <span className="eyebrow">BAHÇENE HOŞ GELDİN</span>
                 <h2>
                   {modal === "login"
-                    ? "Yeniden merhaba."
+                    ? "Merhaba."
                     : "Yeni bir başlangıç."}
                 </h2>
                 <form
@@ -1013,6 +1072,7 @@ function App() {
                 <h2>{selected.name}</h2>
                 <p>{selected.description}</p>
                 <h3>{money(selected.price)}</h3>
+                <Swatches p={selected} picked={picked} setPicked={setPicked} large />
                 <p>
                   {selected.isActive === false
                     ? VAL.VAL004
@@ -1332,6 +1392,33 @@ function AddressForm({ onSave, notify }) {
       </label>
       <button className="primary" disabled={busy}>Adresi kaydet</button>
     </form>
+  );
+}
+
+/* Renk seçenekleri: seçilen renk sepete ve 3D önizlemeye yansır. */
+function Swatches({ p, picked, setPicked, large }) {
+  const list = p.colors?.length ? p.colors : p.color ? [{ name: "Doğal", hex: p.color }] : [];
+  if (!list.length) return null;
+  const current = (picked[p._id] || list[0].hex).toLowerCase();
+  const name = list.find((c) => c.hex.toLowerCase() === current)?.name;
+  const interactive = p.colors?.length > 0;
+  return (
+    <span className={"swatches" + (large ? " large" : "")} role="group" aria-label="Renk seçenekleri">
+      {list.map((c) => (
+        <button
+          type="button"
+          key={c.hex}
+          className={"swatch" + (c.hex.toLowerCase() === current ? " on" : "")}
+          style={{ background: c.hex }}
+          title={c.name}
+          aria-label={c.name}
+          aria-pressed={c.hex.toLowerCase() === current}
+          disabled={!interactive}
+          onClick={() => setPicked((s) => ({ ...s, [p._id]: c.hex.toLowerCase() }))}
+        />
+      ))}
+      {large && name && <em className="swatch-name">{name}</em>}
+    </span>
   );
 }
 createRoot(document.getElementById("root")).render(<App />);

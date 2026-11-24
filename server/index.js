@@ -2,6 +2,7 @@ import { connectDB } from "./db.js";
 import { createApp, migrate, seed } from "./app.js";
 import express from "express";
 import { bootstrapAdmin } from "./bootstrap-admin.js";
+import { seedDemoStaff } from "./demo-staff.js";
 const uri = await connectDB();
 await migrate();
 await seed();
@@ -9,6 +10,7 @@ await bootstrapAdmin({
   email: process.env.ADMIN_EMAIL,
   password: process.env.ADMIN_PASSWORD,
 });
+await seedDemoStaff();
 const app = createApp(uri);
 if (process.env.NODE_ENV === "production") {
   app.use(express.static("dist"));

@@ -29,6 +29,7 @@ export const STATUS_LABELS = {
   preparing: "Hazırlanıyor",
   shipped: "Kargolandı",
   delivered: "Teslim edildi",
+  returned: "İade edildi",
   cancelled: "İptal edildi",
   stock_conflict: "Stok sorunu — iade gerekli",
 };

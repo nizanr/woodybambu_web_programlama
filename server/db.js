@@ -68,6 +68,8 @@ const productSchema = new mongoose.Schema(
     images: [String],
     description: String,
     color: String,
+    // Renk seçenekleri: müşteri seçer; 3D önizleme ve sipariş satırına yansır.
+    colors: [new mongoose.Schema({ name: String, hex: String }, { _id: false })],
     // "" → 3D model yok; "builtin:<chair|sofa|table|lounger>" → temsili
     // Three.js modeli; https://…/*.glb|gltf → harici model dosyası.
     model3dUrl: { type: String, default: "" },
@@ -100,7 +102,7 @@ export const Cart = mongoose.model(
       userId: { type: ObjectId, unique: true },
       items: [
         new mongoose.Schema(
-          { productId: ObjectId, quantity: Number },
+          { productId: ObjectId, quantity: Number, color: String },
           { _id: false },
         ),
       ],
@@ -117,6 +119,7 @@ export const ORDER_STATUSES = [
   "preparing",
   "shipped",
   "delivered",
+  "returned",
   "cancelled",
   "stock_conflict",
 ];
@@ -170,6 +173,7 @@ export const EVENT_TYPES = [
   "remove_from_cart",
   "checkout_start",
   "purchase",
+  "dwell",
 ];
 export const Event = mongoose.model(
   "Event",
@@ -180,6 +184,9 @@ export const Event = mongoose.model(
     productId: { type: ObjectId, default: null },
     userId: { type: ObjectId, default: null },
     orderId: { type: ObjectId, default: null },
+    // dwell olayı: sitede/sayfada geçirilen süre (sn) ve sayfa adı
+    page: String,
+    durationSec: Number,
     consentState: { type: String, enum: ["granted", "anonymous"] },
     occurredAt: { type: Date, index: true },
   }),
@@ -278,4 +285,13 @@ export const Notification = mongoose.model(
     },
     { timestamps: true },
   ),
+);
+
+/* Çerez/analitik tercihi sayaçları (kabul/ret) — kişisel veri içermez. */
+export const ConsentLog = mongoose.model(
+  "ConsentLog",
+  new mongoose.Schema({
+    analytics: Boolean,
+    at: { type: Date, default: Date.now, index: true },
+  }),
 );
