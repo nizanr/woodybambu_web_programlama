@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { VAL, money } from "./util.js";
 import { buildBuiltin } from "./models3d.js";
+import { buildEnvironment } from "./environment.js";
 import { sizeOf } from "../server/balcony.js";
 
 /* Harici GLB/GLTF modeli; boyutu sahneye sığacak şekilde normalize edilir. */
@@ -38,8 +39,7 @@ const readable = (url) =>
 /* Sahne ölçeği: 1 metre = UNIT birim. Her model gerçek enine göre
    ölçeklenir; böylece takımdaki ürünler birbirine göre doğru boyutta durur. */
 const UNIT = 2;
-// Fotoğraf yüklenmeden önce gösterilen boş bahçe arka planı.
-const DEFAULT_BG = "/images/garden-empty.jpg";
+
 const FLOOR = -0.85;
 const rad = (d) => (d * Math.PI) / 180;
 const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
@@ -84,6 +84,7 @@ export default function Studio({
     sceneRef = useRef(null),
     viewRef = useRef(null),
     ringRef = useRef(null),
+    envRef = useRef(null),
     objects = useRef(new Map()),
     fileRef = useRef(null);
   const preview = settings?.preview || { maxPhotoMb: 8, loadTargetSec: 5, saveLayoutEnabled: true };
@@ -184,6 +185,10 @@ export default function Studio({
     scene.add(light);
     const holder = new THREE.Group();
     scene.add(holder);
+    // Fotoğraf yokken gösterilen boş veranda + bahçe (3D, mobilyalarla aynı zeminde).
+    const env = buildEnvironment();
+    scene.add(env.group);
+    envRef.current = { ...env, scene };
     // Seçili ürünlerin altındaki halkalar (en fazla 12 ürün).
     const ringGeo = new THREE.RingGeometry(0.92, 1, 64),
       ringMat = new THREE.MeshBasicMaterial({ color: 0xf2c46b, transparent: true, opacity: 0.9, depthWrite: false });
@@ -201,7 +206,9 @@ export default function Studio({
     };
     draw();
     const resize = new ResizeObserver(() => {
-      const { width, height } = el.getBoundingClientRect();
+      // clientWidth/Height: açılış animasyonundaki ölçek dönüşümünden etkilenmez.
+      const width = el.clientWidth,
+        height = el.clientHeight;
       if (!width || !height) return;
       renderer.setSize(width, height);
       camera.aspect = width / height;
@@ -220,6 +227,7 @@ export default function Studio({
       objs.clear();
       sceneRef.current = null;
       viewRef.current = null;
+      envRef.current = null;
     };
   }, []);
 
@@ -305,6 +313,15 @@ export default function Studio({
     holder.scale.setScalar(group.scale);
     holder.rotation.y = rad(group.rotation) + 0.4;
     holder.position.set(group.x, group.y, 0);
+    const env = envRef.current;
+    if (env) {
+      const show = !photo;
+      env.group.visible = show;
+      env.scene.background = show ? env.background : null;
+      env.scene.fog = show ? env.fog : null;
+      // Ürün gölgeleri zeminin hemen üstünde kalsın diye çok az aşağıda.
+      env.setFloor(group.y + (FLOOR - 0.02) * group.scale);
+    }
     for (const pc of pieces) {
       const o = objects.current.get(pc.key)?.obj;
       if (!o) continue;
@@ -534,15 +551,18 @@ export default function Studio({
     const view = viewRef.current,
       el = host.current;
     if (!view || !el || status !== "ready") return;
-    const { width, height } = el.getBoundingClientRect();
+    const width = el.clientWidth,
+      height = el.clientHeight;
     const ratio = Math.min(devicePixelRatio || 1, 2);
     const out = document.createElement("canvas");
     out.width = Math.round(width * ratio);
     out.height = Math.round(height * ratio);
     const ctx = out.getContext("2d");
     const bg = new Image();
-    bg.src = photo?.url || DEFAULT_BG;
     try {
+      // Fotoğraf yoksa 3D veranda zaten çizimde; arka plan gerekmez.
+      if (!photo?.url) throw Error("no photo");
+      bg.src = photo.url;
       await bg.decode();
       // CSS'teki background-size: cover ile aynı kırpma.
       const s = Math.max(out.width / bg.naturalWidth, out.height / bg.naturalHeight);
@@ -715,7 +735,7 @@ export default function Studio({
             className="scene"
             tabIndex={0}
             aria-label="Önizleme alanı. Ok tuşlarıyla seçili mobilyayı, T ile ürünler arasında geçiş yapabilirsiniz."
-            style={{ backgroundImage: `url(${photo?.url || DEFAULT_BG})` }}
+            style={photo?.url ? { backgroundImage: `url(${photo.url})` } : { background: "#dfe9ec" }}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerEnd}
