@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { money } from "./util.js";
+import { kindOf, sizeOf } from "../server/balcony.js";
 
 /* FR-034 — Balkon ölçüsüne göre mobilya önerisi.
    Kullanıcı balkonun enini ve derinliğini (cm) girer; sunucu yürüme payı
@@ -86,6 +87,44 @@ export default function Balcony({ api, products, onPreview, onDetail }) {
   const [busy, setBusy] = useState(false);
 
   const full = (lean) => products.find((p) => p._id === lean._id) || lean;
+  const LETTER = { table: "M", chair: "S", sofa: "K", lounger: "Ş" };
+  /* Takımı 3D sahneye aktarır: plandaki her parça kendi ürünüyle ve plan
+     konumuyla (merkeze göre cm) gelir; yan çevrilmiş parça 90° döner. */
+  const setPieces = (o) => {
+    const minX = Math.min(...o.rects.map((r) => r.x)),
+      maxX = Math.max(...o.rects.map((r) => r.x + r.w)),
+      minY = Math.min(...o.rects.map((r) => r.y)),
+      maxY = Math.max(...o.rects.map((r) => r.y + r.d));
+    const used = new Map();
+    const table = o.rects.find((r) => r.label === "M");
+    const mid = (r) => [r.x + r.w / 2, r.y + r.d / 2];
+    return o.rects
+      .map((r) => {
+        const it = o.items.find((i) => LETTER[kindOf(full(i.product))] === r.label);
+        const p = it && full(it.product);
+        if (!p?.model3dUrl) return null;
+        const n = used.get(p._id) || 0;
+        if (n >= it.qty) return null;
+        used.set(p._id, n + 1);
+        const size = sizeOf(p);
+        const turned = size && Math.abs(r.w - size.w) > Math.abs(r.w - size.d);
+        // Masalı takımda sandalyeler masaya döner (model önü +z yönündedir).
+        let rotation = turned ? 90 : 0;
+        if (table && r.label === "S") {
+          const [tx, ty] = mid(table),
+            [cx, cy] = mid(r);
+          rotation = Math.round(((Math.atan2(tx - cx, ty - cy) * 180) / Math.PI + 360) % 360);
+        }
+        return {
+          product: p,
+          xCm: r.x + r.w / 2 - (minX + maxX) / 2,
+          // Plan: üst = duvar; sahnede kameraya yakın taraf korkuluk.
+          zCm: r.y + r.d / 2 - (minY + maxY) / 2,
+          rotation,
+        };
+      })
+      .filter(Boolean);
+  };
   const run = async (w, d) => {
     if (!valid(w) || !valid(d)) return setError(VAL021);
     setError("");
@@ -134,8 +173,8 @@ export default function Balcony({ api, products, onPreview, onDetail }) {
         </button>
         <div className="balcony-actions">
           {lead.model3dUrl && (
-            <button className="text-btn" onClick={() => onPreview(lead)}>
-              Bahçede Gör
+            <button className="text-btn" onClick={() => onPreview(lead, isSet ? setPieces(o) : null)}>
+              {isSet ? "Takımı 3D gör" : "Bahçede Gör"}
             </button>
           )}
           <button className="text-btn" onClick={() => onDetail(lead)}>

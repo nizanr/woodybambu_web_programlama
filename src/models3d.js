@@ -182,6 +182,7 @@ export function buildBuiltin(type, color) {
       new THREE.MeshBasicMaterial({ map: shadowTexture(), transparent: true, depthWrite: false }),
     );
     m.rotation.x = -Math.PI / 2;
+    m.userData.shadow = true; // ölçü hesabına katılmaz (Studio)
     m.position.y = y;
     m.renderOrder = -1;
     group.add(m);

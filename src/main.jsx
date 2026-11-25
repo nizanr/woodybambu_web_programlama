@@ -123,6 +123,7 @@ function App() {
     [sort, setSort] = useState("featured"),
     [modal, setModal] = useState(null),
     [selected, setSelected] = useState(null),
+    [studioSet, setStudioSet] = useState(null),
     [toast, setToast] = useState(""),
     [toastHiding, setToastHiding] = useState(false),
     [orders, setOrders] = useState([]),
@@ -310,16 +311,20 @@ function App() {
     trackView(p);
   };
   /* FR-027: 3D önizleme ziyaretçi dahil herkese açıktır. */
-  const openStudio = (p) => {
+  const openStudio = (p, set) => {
     const target =
       p?.model3dUrl && p.isActive !== false
         ? p
         : products.find((x) => x.model3dUrl && x.isActive !== false);
     if (!previewOn || !target) return notify(VAL.VAL018);
+    // set: balkon önerisindeki takımın parçaları (plan konumlarıyla).
+    setStudioSet(set?.length ? set : null);
     setSelected(target);
     setModal("studio");
   };
-  const add = async (p) => {
+  /* opts: { color, quantity, quiet } — 3D sahnedeki ürünler toplu eklenirken
+     kullanılır. Başarılıysa true döner. */
+  const add = async (p, opts = {}) => {
     if (!user) {
       notify(
         modal === "studio" ? VAL.VAL019 : "Sepete eklemek için giriş yapın veya üye olun.",
@@ -335,14 +340,17 @@ function App() {
           method: "POST",
           body: JSON.stringify({
             productId: p._id,
-            ...(picked[p._id] ? { color: picked[p._id] } : {}),
+            ...(opts.quantity > 1 ? { quantity: opts.quantity } : {}),
+            ...((opts.color ?? picked[p._id]) ? { color: opts.color ?? picked[p._id] } : {}),
           }),
         }),
       );
-      notify("Ürün sepetinize eklendi");
+      if (!opts.quiet) notify("Ürün sepetinize eklendi");
+      return true;
     } catch (e) {
-      notify(e.message);
+      notify(p.name + ": " + e.message);
       refreshProducts();
+      return false;
     }
   };
   const setQuantity = async (line, quantity) => {
@@ -872,6 +880,7 @@ function App() {
         >
           <Studio
             product={selected}
+            initialPieces={studioSet}
             pickedColors={picked}
             products={products}
             user={user}
@@ -1439,29 +1448,41 @@ function AddressForm({ onSave, notify }) {
   );
 }
 
-/* Renk seçenekleri: seçilen renk sepete ve 3D önizlemeye yansır. */
+/* Renk seçenekleri: seçilen renk sepete ve 3D önizlemeye yansır.
+   Adlar sunucudan gelir (Pantone TCX karşılığı ya da yöneticinin verdiği ad). */
 function Swatches({ p, picked, setPicked, large }) {
-  const list = p.colors?.length ? p.colors : p.color ? [{ name: "Doğal", hex: p.color }] : [];
+  const list = p.colorOptions?.length
+    ? p.colorOptions
+    : p.color
+      ? [{ name: p.color, hex: p.color.toLowerCase() }]
+      : [];
   if (!list.length) return null;
   const current = (picked[p._id] || list[0].hex).toLowerCase();
-  const name = list.find((c) => c.hex.toLowerCase() === current)?.name;
-  const interactive = p.colors?.length > 0;
+  const sel = list.find((c) => c.hex === current) || list[0];
+  const label = (c) => c.name + (c.pantone && c.pantone !== c.name ? ` · Pantone ${c.pantone}` : "");
   return (
     <span className={"swatches" + (large ? " large" : "")} role="group" aria-label="Renk seçenekleri">
       {list.map((c) => (
         <button
           type="button"
           key={c.hex}
-          className={"swatch" + (c.hex.toLowerCase() === current ? " on" : "")}
+          className={"swatch" + (c.hex === sel.hex ? " on" : "")}
           style={{ background: c.hex }}
-          title={c.name}
-          aria-label={c.name}
-          aria-pressed={c.hex.toLowerCase() === current}
-          disabled={!interactive}
-          onClick={() => setPicked((s) => ({ ...s, [p._id]: c.hex.toLowerCase() }))}
+          title={label(c)}
+          aria-label={label(c)}
+          aria-pressed={c.hex === sel.hex}
+          disabled={list.length < 2}
+          onClick={(e) => {
+            e.stopPropagation();
+            setPicked((s) => ({ ...s, [p._id]: c.hex }));
+          }}
         />
       ))}
-      {large && name && <em className="swatch-name">{name}</em>}
+      <em className="swatch-name">
+        {sel.name}
+        {large && sel.pantone && sel.pantone !== sel.name && <small> · Pantone {sel.pantone}</small>}
+        {list.length > 1 && !large && <small> · {list.length} renk</small>}
+      </em>
     </span>
   );
 }

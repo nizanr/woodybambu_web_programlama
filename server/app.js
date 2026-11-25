@@ -7,6 +7,7 @@ import crypto from "node:crypto";
 import { notifyDiscord, orderEmbed } from "./discord.js";
 import { isStaffAlias } from "./demo-staff.js";
 import mongoose from "mongoose";
+import { colorOptions, withPantone } from "../src/pantone.js";
 import {
   User,
   Product,
@@ -373,6 +374,7 @@ export function createApp(uri, { paymentClient } = {}) {
       name: p.name,
       color: p.color,
       colors: p.colors,
+      colorOptions: colorOptions(p),
       model3dUrl: p.model3dUrl,
       price: p.price,
       stock: p.stock,
@@ -428,12 +430,17 @@ export function createApp(uri, { paymentClient } = {}) {
   /* ─── Sepet (FR-005/006/007, BR-004, VAL-003/004) ─── */
   // Renk: ürünün tanımlı seçeneklerinden biri olmalı. undefined → seçim yok,
   // false → geçersiz.
+  // Model rengi tek seçenek olarak da seçilebilir (colorOptions).
   const colorFor = (p, hex) => {
     if (hex === undefined || hex === null || hex === "") return undefined;
     if (typeof hex !== "string") return false;
-    return (p?.colors || []).some((c) => c.hex.toLowerCase() === hex.toLowerCase())
+    return colorOptions(p).some((c) => c.hex === hex.toLowerCase())
       ? hex.toLowerCase()
       : false;
+  };
+  const colorNameFor = (p, hex) => {
+    const c = colorOptions(p).find((x) => x.hex === hex);
+    return c ? c.name + (c.pantone && c.name !== c.pantone ? ` (Pantone ${c.pantone})` : "") : undefined;
   };
   const loadCart = async (userId) =>
     (await Cart.findOne({ userId })) ||
@@ -458,7 +465,7 @@ export function createApp(uri, { paymentClient } = {}) {
               stock: p.stock,
               image: p.image,
               color: i.color,
-              colorName: p.colors?.find((c) => c.hex.toLowerCase() === i.color)?.name,
+              colorName: colorNameFor(p, i.color),
               isActive: p.status === "published",
             }
           : null;
@@ -638,7 +645,7 @@ export function createApp(uri, { paymentClient } = {}) {
         price: p.price,
         quantity: i.quantity,
         ...(color
-          ? { color, colorName: p.colors.find((c) => c.hex.toLowerCase() === color)?.name }
+          ? { color, colorName: colorNameFor(p, color) }
           : {}),
       });
     }
@@ -904,7 +911,42 @@ export function createApp(uri, { paymentClient } = {}) {
     const s = await getSettings();
     if (!s.preview.enabled || !s.preview.saveLayoutEnabled)
       return fail(res, 403, "Yerleşim kaydetme şu anda kapalı");
-    const { name, productId, x, y, scale, rotation } = req.body;
+    const { name, x, y, scale, rotation } = req.body;
+    let { productId } = req.body;
+    // Çok ürünlü sahne (takım ya da kullanıcının eklediği ürünler).
+    let pieces;
+    if (req.body.pieces !== undefined) {
+      const raw = req.body.pieces;
+      if (!Array.isArray(raw) || !raw.length || raw.length > 12)
+        return fail(res, 400, "Geçersiz tasarım");
+      pieces = [];
+      for (const pc of raw) {
+        const ok =
+          pc &&
+          isId(pc.productId) &&
+          [pc.x, pc.z, pc.scale, pc.rotation].every(Number.isFinite) &&
+          Math.abs(pc.x) <= 20 &&
+          Math.abs(pc.z) <= 20 &&
+          pc.scale >= 0.2 &&
+          pc.scale <= 3 &&
+          pc.rotation >= 0 &&
+          pc.rotation <= 360;
+        if (!ok) return fail(res, 400, "Geçersiz tasarım");
+        const p = await Product.findOne({ _id: pc.productId, status: "published" });
+        if (!p) return fail(res, 400, "Geçersiz tasarım");
+        const color = colorFor(p, pc.color);
+        if (color === false) return fail(res, 400, "Geçersiz renk seçimi");
+        pieces.push({
+          productId: pc.productId,
+          x: pc.x,
+          z: pc.z,
+          scale: pc.scale,
+          rotation: pc.rotation,
+          ...(color ? { color } : {}),
+        });
+      }
+      productId = pieces[0].productId;
+    }
     if (
       typeof name !== "string" ||
       !name.trim() ||
@@ -930,6 +972,7 @@ export function createApp(uri, { paymentClient } = {}) {
         y,
         scale,
         rotation,
+        ...(pieces ? { pieces } : {}),
       }),
     );
   });
@@ -1042,11 +1085,11 @@ export function createApp(uri, { paymentClient } = {}) {
       c.every(
         (x) =>
           x &&
-          typeof x.name === "string" &&
-          x.name.trim() &&
-          x.name.length <= 30 &&
+          (x.name === undefined || (typeof x.name === "string" && x.name.length <= 30)) &&
+          typeof x.hex === "string" &&
           /^#[0-9a-fA-F]{6}$/.test(x.hex),
-      ));
+      ) &&
+      new Set(c.map((x) => x.hex.toLowerCase())).size === c.length);
   const productError = (p) => {
     if (
       !Number.isFinite(p.price) ||
@@ -1099,6 +1142,11 @@ export function createApp(uri, { paymentClient } = {}) {
     Object.fromEntries(
       PRODUCT_FIELDS.filter((k) => b[k] !== undefined).map((k) => [k, b[k]]),
     );
+  // Adı boş bırakılan renk Pantone adını alır; Pantone kodu HEX'ten hesaplanır.
+  const normalizeColors = (data) => {
+    if (Array.isArray(data.colors)) data.colors = data.colors.map(withPantone);
+    return data;
+  };
   const duplicateName = (name, exceptId) =>
     Product.exists({
       name: { $regex: "^" + name.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "$", $options: "i" },
@@ -1108,6 +1156,7 @@ export function createApp(uri, { paymentClient } = {}) {
     const data = { status: "published", model3dUrl: "", ...pickProduct(req.body) };
     const err = productError(data);
     if (err) return fail(res, 400, err);
+    normalizeColors(data);
     const c = await resolveCategory(req.body);
     if (!c) return fail(res, 400, MSG.VAL013, { field: "categoryId" });
     if (await duplicateName(data.name))
@@ -1129,6 +1178,7 @@ export function createApp(uri, { paymentClient } = {}) {
     const data = { ...before, ...pickProduct(req.body) };
     const err = productError(data);
     if (err) return fail(res, 400, err);
+    normalizeColors(data);
     let c = null;
     if (req.body.categoryId !== undefined || req.body.category !== undefined) {
       c = await resolveCategory(req.body);
@@ -1264,6 +1314,25 @@ export function createApp(uri, { paymentClient } = {}) {
     );
     res.json(after);
   });
+  // Aktif bir indirim kodu varken ödeme ekranında kod alanı gizli kalmasın:
+  // chk_coupon_enabled kapalıysa açılır (FR-009) ve denetim kaydına yazılır (BR-T02).
+  const enableCouponField = async (req) => {
+    const before = await getSettings();
+    if (before.commerce.couponEnabled) return true;
+    await Setting.updateOne(
+      { key: "global" },
+      { $set: { "commerce.couponEnabled": true }, $inc: { version: 1 } },
+    );
+    const after = await getSettings();
+    await audit(
+      req,
+      "settings_update",
+      "settings",
+      { version: before.version, commerce: { couponEnabled: false } },
+      { version: after.version, commerce: { couponEnabled: true } },
+    );
+    return true;
+  };
   app.get("/api/admin/coupons", auth, roles("admin"), async (req, res) =>
     res.json(await Coupon.find().sort({ createdAt: -1 })),
   );
@@ -1281,7 +1350,8 @@ export function createApp(uri, { paymentClient } = {}) {
       return fail(res, 400, MSG.VAL013);
     const c = await Coupon.create({ code, type, value });
     await audit(req, "coupon_create", c.id, undefined, { code, type, value });
-    res.json(c);
+    const couponEnabled = await enableCouponField(req);
+    res.json({ ...c.toJSON(), couponEnabled });
   });
   app.patch("/api/admin/coupons/:id", auth, roles("admin"), async (req, res) => {
     if (!isId(req.params.id) || typeof req.body.isActive !== "boolean")
@@ -1293,7 +1363,8 @@ export function createApp(uri, { paymentClient } = {}) {
     );
     if (!c) return res.sendStatus(404);
     await audit(req, "coupon_update", c.id, undefined, { isActive: c.isActive });
-    res.json(c);
+    const couponEnabled = c.isActive ? await enableCouponField(req) : undefined;
+    res.json({ ...c.toJSON(), couponEnabled });
   });
   app.get("/api/admin/audit", auth, roles("admin"), async (req, res) => {
     const filter = {};

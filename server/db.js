@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { colorOptions } from "../src/pantone.js";
 export async function connectDB() {
   if (process.env.NODE_ENV === "production" && !process.env.MONGODB_URI)
     throw Error("MONGODB_URI is required in production");
@@ -69,7 +70,10 @@ const productSchema = new mongoose.Schema(
     description: String,
     color: String,
     // Renk seçenekleri: müşteri seçer; 3D önizleme ve sipariş satırına yansır.
-    colors: [new mongoose.Schema({ name: String, hex: String }, { _id: false })],
+    // pantone: HEX'e en yakın Pantone TCX kodu (ör. "16-1324 TCX"), sunucu doldurur.
+    colors: [
+      new mongoose.Schema({ name: String, hex: String, pantone: String }, { _id: false }),
+    ],
     // "" → 3D model yok; "builtin:<chair|sofa|table|lounger>" → temsili
     // Three.js modeli; https://…/*.glb|gltf → harici model dosyası.
     model3dUrl: { type: String, default: "" },
@@ -84,6 +88,9 @@ const productSchema = new mongoose.Schema(
       virtuals: true,
       transform: (doc, ret) => {
         delete ret.id;
+        // Müşteriye gösterilen seçenekler: tanımlı renkler ya da model rengi,
+        // her biri Pantone adı/koduyla.
+        ret.colorOptions = colorOptions(ret);
         return ret;
       },
     },
@@ -204,6 +211,21 @@ export const Design = mongoose.model(
       y: Number,
       scale: Number,
       rotation: Number,
+      // Çok ürünlü sahne: her parça ayrı konum/dönüş/ölçek/renk taşır.
+      // Boşsa eski tek ürünlü kayıt (productId + x/y/scale/rotation).
+      pieces: [
+        new mongoose.Schema(
+          {
+            productId: String,
+            x: Number,
+            z: Number,
+            scale: Number,
+            rotation: Number,
+            color: String,
+          },
+          { _id: false },
+        ),
+      ],
       photoRef: { type: String, default: null },
     },
     { timestamps: true },
