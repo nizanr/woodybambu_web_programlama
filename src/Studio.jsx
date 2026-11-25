@@ -132,8 +132,20 @@ export default function Studio({
   const canSave = preview.saveLayoutEnabled && ["customer", "admin"].includes(user?.role);
   const canBuy = !user || ["customer", "admin"].includes(user.role);
   const multi = pieces.length > 1;
-  const target = multi && pieces.some((p) => p.key === active) ? active : "all";
-  const activePiece = pieces.find((p) => p.key === target);
+  // Seçim: "all", tek ürün anahtarı ya da "g:k1,k2" (aynı ürün/renk/boyut grubu).
+  const liveKeys = (a) =>
+    a.startsWith("g:") ? a.slice(2).split(",").filter((k) => pieces.some((p) => p.key === k)) : [];
+  const target = !multi
+    ? "all"
+    : active.startsWith("g:")
+      ? liveKeys(active).length > 1
+        ? "g:" + liveKeys(active).join(",")
+        : liveKeys(active)[0] || "all"
+      : pieces.some((p) => p.key === active)
+        ? active
+        : "all";
+  const selectedKeys = target === "all" ? [] : target.startsWith("g:") ? target.slice(2).split(",") : [target];
+  const activePiece = pieces.find((p) => p.key === selectedKeys[0]);
   const state = useRef();
   state.current = { pieces, group, target };
 
@@ -170,15 +182,16 @@ export default function Studio({
     scene.add(light);
     const holder = new THREE.Group();
     scene.add(holder);
-    // Seçili ürünün altındaki halka.
-    const ring = new THREE.Mesh(
-      new THREE.RingGeometry(0.92, 1, 64),
-      new THREE.MeshBasicMaterial({ color: 0xf2c46b, transparent: true, opacity: 0.9, depthWrite: false }),
-    );
-    ring.rotation.x = -Math.PI / 2;
-    ring.visible = false;
-    holder.add(ring);
-    ringRef.current = ring;
+    // Seçili ürünlerin altındaki halkalar (en fazla 12 ürün).
+    const ringGeo = new THREE.RingGeometry(0.92, 1, 64),
+      ringMat = new THREE.MeshBasicMaterial({ color: 0xf2c46b, transparent: true, opacity: 0.9, depthWrite: false });
+    ringRef.current = Array.from({ length: 12 }, () => {
+      const ring = new THREE.Mesh(ringGeo, ringMat);
+      ring.rotation.x = -Math.PI / 2;
+      ring.visible = false;
+      holder.add(ring);
+      return ring;
+    });
     let frame;
     const draw = () => {
       frame = requestAnimationFrame(draw);
@@ -297,15 +310,15 @@ export default function Studio({
       o.rotation.y = rad(pc.rotation);
       o.scale.setScalar(pc.scale);
     }
-    const ring = ringRef.current,
-      sel = activePiece && objects.current.get(activePiece.key);
-    if (ring) {
+    (ringRef.current || []).forEach((ring, i) => {
+      const pc = pieces.find((p) => p.key === selectedKeys[i]),
+        sel = pc && objects.current.get(pc.key);
       ring.visible = Boolean(sel);
       if (sel) {
-        ring.position.set(activePiece.x, FLOOR + 0.01, activePiece.z);
-        ring.scale.setScalar(Math.max(sel.radius, 0.3) * activePiece.scale);
+        ring.position.set(pc.x, FLOOR + 0.01, pc.z);
+        ring.scale.setScalar(Math.max(sel.radius, 0.3) * pc.scale);
       }
-    }
+    });
   });
   useEffect(
     () => () => {
@@ -333,14 +346,15 @@ export default function Studio({
   /* Hedef: "all" (tüm sahne) ya da bir ürün anahtarı. */
   const valueOf = (key) => {
     const { pieces: ps, group: g } = state.current;
-    return key === "all" ? g : ps.find((p) => p.key === key) || g;
+    const first = key.startsWith("g:") ? key.slice(2).split(",")[0] : key;
+    return key === "all" ? g : ps.find((p) => p.key === first) || g;
   };
   const patch = (key, upd) => {
-    if (key === "all") setGroup((g) => ({ ...g, ...(typeof upd === "function" ? upd(g) : upd) }));
-    else
-      setPieces((ps) =>
-        ps.map((p) => (p.key === key ? { ...p, ...(typeof upd === "function" ? upd(p) : upd) } : p)),
-      );
+    if (key === "all") return setGroup((g) => ({ ...g, ...(typeof upd === "function" ? upd(g) : upd) }));
+    const keys = key.startsWith("g:") ? key.slice(2).split(",") : [key];
+    setPieces((ps) =>
+      ps.map((p) => (keys.includes(p.key) ? { ...p, ...(typeof upd === "function" ? upd(p) : upd) } : p)),
+    );
   };
   /* Ekrandaki kaydırmayı hedefe uygular: tüm sahne ekran düzleminde,
      tek ürün zeminde (sahnenin dönüşü ve ölçeği hesaba katılarak) taşınır. */
@@ -354,10 +368,12 @@ export default function Studio({
     const th = rad(g.rotation) + 0.4;
     const wx = dx / g.scale,
       wz = (-dy * 2.5) / g.scale; // kamera eğimi: derinlik ekranda kısalır
-    patch(key, {
-      x: clamp(base.x + wx * Math.cos(th) - wz * Math.sin(th), -20, 20),
-      z: clamp(base.z + wx * Math.sin(th) + wz * Math.cos(th), -20, 20),
-    });
+    const mx = wx * Math.cos(th) - wz * Math.sin(th),
+      mz = wx * Math.sin(th) + wz * Math.cos(th);
+    // Grup: her parça aynı miktarda kayar (klavye ile adım adım).
+    if (key.startsWith("g:"))
+      return patch(key, (v) => ({ x: clamp(v.x + mx, -20, 20), z: clamp(v.z + mz, -20, 20) }));
+    patch(key, { x: clamp(base.x + mx, -20, 20), z: clamp(base.z + mz, -20, 20) });
   };
 
   /* Dokunulan ürünü bulur (raycast). */
@@ -449,7 +465,7 @@ export default function Studio({
     // Sekme ile ürünler arasında geçiş; klavyeyle döndürme (Q/E), ölçek (+/−) — NFR-03.
     if (e.key.toLowerCase() === "t" && multi) {
       e.preventDefault();
-      const order = ["all", ...pieces.map((p) => p.key)];
+      const order = ["all", ...rows.map(rowTarget)];
       setActive(order[(order.indexOf(target) + 1) % order.length]);
       return;
     }
@@ -464,9 +480,9 @@ export default function Studio({
       e.preventDefault();
       patch(target, (v) => ({ scale: clamp(+(v.scale + zoom).toFixed(2), 0.2, 3) }));
     }
-    if ((e.key === "Delete" || e.key === "Backspace") && activePiece) {
+    if ((e.key === "Delete" || e.key === "Backspace") && selectedKeys.length) {
       e.preventDefault();
-      removePiece(activePiece.key);
+      removeKeys(selectedKeys);
     }
   };
 
@@ -479,15 +495,35 @@ export default function Studio({
     setPieces([...pieces, pc]);
     setActive(pc.key);
   };
-  const removePiece = (key) => {
-    if (pieces.length < 2) return;
-    setPieces(pieces.filter((p) => p.key !== key));
+  const removeKeys = (keys) => {
+    const rest = pieces.filter((p) => !keys.includes(p.key));
+    if (!rest.length) return;
+    setPieces(rest);
     setActive("all");
   };
   const swapPiece = (key, p) => {
     if (!p) return;
-    const k = key === "all" ? pieces[0].key : key;
-    setPieces(pieces.map((x) => (x.key === k ? { ...x, productId: p._id, color: defaultColor(p) } : x)));
+    const keys = key === "all" ? [pieces[0].key] : key.startsWith("g:") ? key.slice(2).split(",") : [key];
+    setPieces(pieces.map((x) => (keys.includes(x.key) ? { ...x, productId: p._id, color: defaultColor(p) } : x)));
+  };
+  /* Aynı ürün + renk + boyuttaki parçalar tek satırda "× adet" olarak gösterilir;
+     rengi ya da boyutu değişen parça kendi satırına ayrılır. */
+  const rows = [];
+  for (const pc of pieces) {
+    const gk = `${pc.productId}|${pc.color}|${pc.scale}`;
+    let r = rows.find((x) => x.gk === gk);
+    if (!r) rows.push((r = { gk, productId: pc.productId, color: pc.color, scale: pc.scale, keys: [] }));
+    r.keys.push(pc.key);
+  }
+  const rowTarget = (r) => (r.keys.length > 1 ? "g:" + r.keys.join(",") : r.keys[0]);
+  const addOne = (r) => {
+    if (pieces.length >= 12) return notify("Sahneye en fazla 12 ürün ekleyebilirsiniz.");
+    const last = pieces.find((p) => p.key === r.keys[r.keys.length - 1]);
+    const real = sizeOf(productOf(last.productId));
+    const step = ((real ? real.w : 60) / 100) * UNIT * last.scale + 0.15;
+    const pc = { ...last, key: newKey(), x: clamp(last.x + step, -20, 20) };
+    setPieces([...pieces, pc]);
+    setActive("g:" + [...r.keys, pc.key].join(","));
   };
 
   /* Önizlemeyi PNG olarak indirme: fotoğraf + 3D model yalnızca tarayıcıda
@@ -516,12 +552,12 @@ export default function Studio({
       ctx.fillRect(0, 0, out.width, out.height);
     }
     // Seçim halkası görüntüye girmesin; tampon kare sonunda temizlendiği için yeniden çiz.
-    const ring = ringRef.current,
-      was = ring?.visible;
-    if (ring) ring.visible = false;
+    const rings = ringRef.current || [],
+      was = rings.map((r) => r.visible);
+    rings.forEach((r) => (r.visible = false));
     view.renderer.render(view.scene, view.camera);
     ctx.drawImage(view.renderer.domElement, 0, 0, out.width, out.height);
-    if (ring) ring.visible = was;
+    rings.forEach((r, i) => (r.visible = was[i]));
     const link = document.createElement("a");
     link.download = `${(name.trim() || "bahcem").replace(/[^\p{L}\p{N}_-]+/gu, "-")}.png`;
     link.href = out.toDataURL("image/png");
@@ -648,7 +684,11 @@ export default function Studio({
   };
   const colorName = (p, hex) => optionsOf(p).find((c) => c.hex === hex)?.name;
   const tv = activePiece || group;
-  const targetLabel = activePiece ? productOf(activePiece.productId)?.name || "Ürün" : multi ? "Tüm sahne" : "Ürün";
+  const targetLabel = activePiece
+    ? (productOf(activePiece.productId)?.name || "Ürün") + (selectedKeys.length > 1 ? ` × ${selectedKeys.length}` : "")
+    : multi
+      ? "Tüm sahne"
+      : "Ürün";
   const single = pieces.length === 1 ? productOf(pieces[0].productId) : null;
 
   return (
@@ -713,18 +753,27 @@ export default function Studio({
                   Tüm sahne · birlikte taşı/ölçekle
                 </button>
               )}
-              {pieces.map((pc) => {
-                const p = productOf(pc.productId);
+              {rows.map((r) => {
+                const p = productOf(r.productId);
                 const opts = optionsOf(p);
+                const picked = r.keys.filter((k) => selectedKeys.includes(k)).length;
                 return (
-                  <div className={"piece-row" + (pc.key === target ? " on" : "")} key={pc.key}>
+                  <div className={"piece-row" + (picked ? " on" : "")} key={r.gk}>
                     <button
                       className="piece-pick"
-                      aria-pressed={pc.key === target}
-                      onClick={() => setActive(pc.key)}
+                      aria-pressed={picked > 0}
+                      onClick={() => setActive(rowTarget(r))}
                     >
                       {p?.name || "Ürün"}
-                      {colorName(p, pc.color) && <small>{colorName(p, pc.color)}</small>}
+                      <small>
+                        {[
+                          colorName(p, r.color),
+                          r.scale !== 1 && `${r.scale.toFixed(2)}× boyut`,
+                          picked && picked < r.keys.length && `${picked}/${r.keys.length} seçili`,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </small>
                     </button>
                     {opts.length > 1 && (
                       <span className="swatches" role="group" aria-label={(p?.name || "") + " renkleri"}>
@@ -732,23 +781,42 @@ export default function Studio({
                           <button
                             type="button"
                             key={c.hex}
-                            className={"swatch" + (c.hex === pc.color ? " on" : "")}
+                            className={"swatch" + (c.hex === r.color ? " on" : "")}
                             style={{ background: c.hex }}
                             title={c.name}
                             aria-label={c.name}
-                            aria-pressed={c.hex === pc.color}
+                            aria-pressed={c.hex === r.color}
                             onClick={() =>
-                              setPieces((ps) => ps.map((x) => (x.key === pc.key ? { ...x, color: c.hex } : x)))
+                              setPieces((ps) => ps.map((x) => (r.keys.includes(x.key) ? { ...x, color: c.hex } : x)))
                             }
                           />
                         ))}
                       </span>
                     )}
-                    {multi && (
+                    <span className="qty-step" role="group" aria-label={(p?.name || "Ürün") + " adedi"}>
+                      <button
+                        className="icon"
+                        disabled={pieces.length < 2}
+                        aria-label={(p?.name || "Ürün") + " bir adet azalt"}
+                        onClick={() => removeKeys([r.keys[r.keys.length - 1]])}
+                      >
+                        −
+                      </button>
+                      <b>× {r.keys.length}</b>
+                      <button
+                        className="icon"
+                        disabled={pieces.length >= 12}
+                        aria-label={(p?.name || "Ürün") + " bir adet artır"}
+                        onClick={() => addOne(r)}
+                      >
+                        +
+                      </button>
+                    </span>
+                    {rows.length > 1 && (
                       <button
                         className="icon"
                         aria-label={(p?.name || "Ürün") + " sahneden çıkar"}
-                        onClick={() => removePiece(pc.key)}
+                        onClick={() => removeKeys(r.keys)}
                       >
                         ×
                       </button>
@@ -776,6 +844,34 @@ export default function Studio({
                   + Sahneye ekle
                 </button>
               </div>
+            </div>
+            <div className="studio-adjust">
+              <strong className="target-label">Ayarlanan: {targetLabel}</strong>
+              <label>
+                Boyut · {tv.scale.toFixed(2)}×
+                <input
+                  type="range"
+                  min=".2"
+                  max="3"
+                  step=".05"
+                  value={tv.scale}
+                  onChange={(e) => patch(target, { scale: +e.target.value })}
+                />
+              </label>
+              <label>
+                Döndürme · {tv.rotation}°
+                <input
+                  type="range"
+                  min="0"
+                  max="360"
+                  value={tv.rotation}
+                  onChange={(e) => {
+                    // Gruptaki parçalar kendi yönlerini korur; hepsi aynı açı kadar döner.
+                    const d = +e.target.value - tv.rotation;
+                    patch(target, (v) => ({ rotation: (((v.rotation + d) % 360) + 360) % 360 }));
+                  }}
+                />
+              </label>
               {(activePiece || !multi) && (
                 <label>
                   {activePiece ? "Seçili ürünü değiştir" : "Ürünü değiştir"}
@@ -791,7 +887,55 @@ export default function Studio({
                   </select>
                 </label>
               )}
+              <span className="adjust-links">
+                <button
+                  className="text-btn"
+                  onClick={() =>
+                    activePiece
+                      ? patch(target, selectedKeys.length > 1 ? { scale: 1 } : { scale: 1, rotation: 0 })
+                      : setGroup({ x: 0, y: 0, rotation: 0, scale: multi ? 0.8 : 1 })
+                  }
+                >
+                  {activePiece ? "Seçileni sıfırla" : "Yerleşimi sıfırla"}
+                </button>
+                <button className="text-btn" disabled={status !== "ready"} onClick={downloadImage}>
+                  Görüntüyü indir (PNG)
+                </button>
+              </span>
             </div>
+            <label className="upload">
+              ↥ {photo ? "Fotoğrafı değiştir" : "Bahçe fotoğrafı yükle"}
+              <input ref={fileRef} type="file" accept="image/jpeg,image/png" onChange={upload} />
+            </label>
+            <small>JPEG veya PNG · en fazla {preview.maxPhotoMb} MB · fotoğrafı görüntünün üzerine de sürükleyebilirsiniz</small>
+            {canSave && (
+              <div className="save-row">
+                <input
+                  value={name}
+                  maxLength="80"
+                  aria-label="Tasarım adı"
+                  placeholder="Tasarım adı"
+                  onChange={(e) => setName(e.target.value)}
+                />
+                <button className="secondary" disabled={busy || !name.trim()} onClick={saveLayout}>
+                  Yerleşimi kaydet
+                </button>
+                <label className="check">
+                  <input
+                    type="checkbox"
+                    checked={savePhoto}
+                    disabled={!photo?.file}
+                    onChange={(e) => setSavePhoto(e.target.checked)}
+                  />
+                  Bahçe fotoğrafını da hesabıma kaydet
+                </label>
+              </div>
+            )}
+            {!user && preview.saveLayoutEnabled && (
+              <button className="secondary" onClick={onLoginRequest}>
+                Yerleşimi kaydetmek için giriş yap
+              </button>
+            )}
             <p className="studio-price">
               {single ? (
                 <>
@@ -809,60 +953,6 @@ export default function Studio({
                 Stok yetersiz: {[...new Set(shortage.map((l) => l.product.name))].join(", ")}
               </small>
             )}
-            <p className="representative">
-              Önizleme fotoğraf tabanlı ve temsilidir; yüzey, ölçü veya ışık
-              algılamaz. Gerçek boyut ve perspektif birebir yansımayabilir.
-              Önizleme fiyatı, stoğu ve siparişi etkilemez.
-            </p>
-            <label className="upload">
-              ↥ {photo ? "Fotoğrafı değiştir" : "Bahçe fotoğrafı yükle"}
-              <input
-                ref={fileRef}
-                type="file"
-                accept="image/jpeg,image/png"
-                onChange={upload}
-              />
-            </label>
-            <small>JPEG veya PNG · en fazla {preview.maxPhotoMb} MB</small>
-            <strong className="target-label">Ayarlanan: {targetLabel}</strong>
-            <label>
-              Boyut · {tv.scale.toFixed(2)}×
-              <input
-                type="range"
-                min=".2"
-                max="3"
-                step=".05"
-                value={tv.scale}
-                onChange={(e) => patch(target, { scale: +e.target.value })}
-              />
-            </label>
-            <label>
-              Döndürme · {tv.rotation}°
-              <input
-                type="range"
-                min="0"
-                max="360"
-                value={tv.rotation}
-                onChange={(e) => patch(target, { rotation: +e.target.value })}
-              />
-            </label>
-            <button
-              className="text-btn"
-              onClick={() =>
-                activePiece
-                  ? patch(target, { scale: 1, rotation: 0 })
-                  : setGroup({ x: 0, y: 0, rotation: 0, scale: multi ? 0.8 : 1 })
-              }
-            >
-              {activePiece ? "Seçili ürünü sıfırla" : "Yerleşimi sıfırla"}
-            </button>
-            <button
-              className="text-btn"
-              disabled={status !== "ready"}
-              onClick={downloadImage}
-            >
-              Görüntüyü indir (PNG)
-            </button>
             {canBuy &&
               (single ? (
                 <button
@@ -873,39 +963,10 @@ export default function Studio({
                   {single.stock ? "Satın al · Sepete ekle" : VAL.VAL004}
                 </button>
               ) : (
-                <button
-                  className="primary"
-                  disabled={busy || shortage.length > 0}
-                  onClick={buyAll}
-                >
+                <button className="primary" disabled={busy || shortage.length > 0} onClick={buyAll}>
                   Sahnedekileri sepete ekle · {money(total)}
                 </button>
               ))}
-            {canSave && (
-              <>
-                <label>
-                  Tasarım adı
-                  <input value={name} maxLength="80" onChange={(e) => setName(e.target.value)} />
-                </label>
-                <label className="check">
-                  <input
-                    type="checkbox"
-                    checked={savePhoto}
-                    disabled={!photo?.file}
-                    onChange={(e) => setSavePhoto(e.target.checked)}
-                  />
-                  Bahçe fotoğrafını da hesabıma kaydet
-                </label>
-                <button className="secondary" disabled={busy || !name.trim()} onClick={saveLayout}>
-                  Yerleşimimi kaydet
-                </button>
-              </>
-            )}
-            {!user && preview.saveLayoutEnabled && (
-              <button className="secondary" onClick={onLoginRequest}>
-                Yerleşimi kaydetmek için giriş yap
-              </button>
-            )}
             {saved.length > 0 && <strong>Kayıtlı yerleşimlerim</strong>}
             {saved.map((d) => (
               <div className="saved-row" key={d._id}>
@@ -931,6 +992,11 @@ export default function Studio({
               kullanılır; siz kaydetmeyi seçmedikçe sunucuya gönderilmez ve
               hiçbir zaman analitik olaylarına ya da loglara yazılmaz.
             </small>
+            <p className="representative">
+              Önizleme fotoğraf tabanlı ve temsilidir; yüzey, ölçü veya ışık
+              algılamaz. Gerçek boyut ve perspektif birebir yansımayabilir.
+              Önizleme fiyatı, stoğu ve siparişi etkilemez.
+            </p>
           </aside>
         </div>
       </section>
