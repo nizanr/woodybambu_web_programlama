@@ -373,6 +373,26 @@ function App() {
       notify(e.message);
     }
   };
+  // Aynı tarayıcıda başka sekmede farklı hesapla girilirse oturum değişir;
+  // sekmeye dönünce kullanıcıyı sunucudaki gerçek oturumla eşitler.
+  useEffect(() => {
+    const sync = () => {
+      if (document.visibilityState === "hidden") return;
+      api("/api/me")
+        .then((u) =>
+          setUser((prev) =>
+            prev?.id === u?.id && prev?.role === u?.role ? prev : u,
+          ),
+        )
+        .catch(() => {});
+    };
+    document.addEventListener("visibilitychange", sync);
+    window.addEventListener("focus", sync);
+    return () => {
+      document.removeEventListener("visibilitychange", sync);
+      window.removeEventListener("focus", sync);
+    };
+  }, []);
   const count = cart.items.reduce((s, i) => s + i.quantity, 0);
   useEffect(() => {
     Promise.all([
