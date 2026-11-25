@@ -32,7 +32,7 @@ export async function bootstrapAdmin({ email, password } = {}) {
       "İlk admin zaten var. Yeni roller yönetim panelinden atanmalı",
     );
   await User.create({
-    name: "Proje Yöneticisi",
+    name: "Admin",
     email: normalized,
     password: await bcrypt.hash(password, 12),
     role: "admin",
