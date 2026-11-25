@@ -38,6 +38,8 @@ const readable = (url) =>
 /* Sahne ölçeği: 1 metre = UNIT birim. Her model gerçek enine göre
    ölçeklenir; böylece takımdaki ürünler birbirine göre doğru boyutta durur. */
 const UNIT = 2;
+// Fotoğraf yüklenmeden önce gösterilen boş bahçe arka planı.
+const DEFAULT_BG = "/images/garden-empty.jpg";
 const FLOOR = -0.85;
 const rad = (d) => (d * Math.PI) / 180;
 const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
@@ -539,7 +541,7 @@ export default function Studio({
     out.height = Math.round(height * ratio);
     const ctx = out.getContext("2d");
     const bg = new Image();
-    bg.src = photo?.url || "/images/garden-hero.png";
+    bg.src = photo?.url || DEFAULT_BG;
     try {
       await bg.decode();
       // CSS'teki background-size: cover ile aynı kırpma.
@@ -713,7 +715,7 @@ export default function Studio({
             className="scene"
             tabIndex={0}
             aria-label="Önizleme alanı. Ok tuşlarıyla seçili mobilyayı, T ile ürünler arasında geçiş yapabilirsiniz."
-            style={{ backgroundImage: `url(${photo?.url || "/images/garden-hero.png"})` }}
+            style={{ backgroundImage: `url(${photo?.url || DEFAULT_BG})` }}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerEnd}
