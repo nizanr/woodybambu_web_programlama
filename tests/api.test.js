@@ -741,3 +741,85 @@ test("TC-32 balcony size recommendation: fitting in-stock products, VAL-021", as
     .expect(400);
   await Product.deleteMany({ _id: { $in: [t._id, out._id] } });
 });
+
+/* ─── İndirim kodu alanı ve çoklu renk / Pantone ─── */
+test("FR-009: creating or activating a coupon turns the checkout coupon field on", async () => {
+  await admin.put("/api/admin/settings").send({ commerce: { couponEnabled: false } }).expect(200);
+  const c = await admin.post("/api/admin/coupons").send({ code: "otomatik", type: "percent", value: 10 }).expect(200);
+  assert.equal(c.body.couponEnabled, true);
+  assert.equal((await guest.get("/api/settings/public")).body.commerce.couponEnabled, true);
+  const log = await AuditLog.findOne({ eventType: "settings_update" }).sort({ occurredAt: -1, _id: -1 });
+  assert.equal(log.after.commerce.couponEnabled, true);
+  // Pasif yapmak alanı kapatmaz; aktif yapmak kapalı alanı yeniden açar.
+  await admin.patch("/api/admin/coupons/" + c.body._id).send({ isActive: false }).expect(200);
+  await admin.put("/api/admin/settings").send({ commerce: { couponEnabled: false } }).expect(200);
+  await admin.patch("/api/admin/coupons/" + c.body._id).send({ isActive: true }).expect(200);
+  assert.equal((await guest.get("/api/settings/public")).body.commerce.couponEnabled, true);
+  await admin.put("/api/admin/settings").send({ commerce: { couponEnabled: false } }).expect(200);
+});
+test("product colors: unnamed colors get the nearest Pantone TCX name; staff can add several", async () => {
+  const r = await manager
+    .post("/api/admin/products")
+    .send({
+      name: "Renkli sandalye",
+      categoryId: chairs.id,
+      price: 10,
+      stock: 5,
+      image: "/images/product-chair.png",
+      model3dUrl: "builtin:chair",
+      color: "#b79b77",
+      colors: [
+        { name: "", hex: "#B79B77" },
+        { hex: "#455147" },
+        { name: "Ceviz", hex: "#ae8358" },
+      ],
+    })
+    .expect(200);
+  assert.deepEqual(
+    r.body.colors.map((c) => [c.name, c.hex, c.pantone]),
+    [
+      ["Lark", "#b79b77", "16-1324 TCX"],
+      ["Cilantro", "#455147", "19-5621 TCX"],
+      ["Ceviz", "#ae8358", "17-1045 TCX"],
+    ],
+  );
+  // Müşteri listesinde üç seçenek de görünür.
+  const listed = (await guest.get("/api/products")).body.find((x) => x._id === r.body._id);
+  assert.equal(listed.colorOptions.length, 3);
+  // Aynı renk kodu iki kez eklenemez.
+  await manager
+    .patch("/api/admin/products/" + r.body._id)
+    .send({ colors: [{ hex: "#455147" }, { hex: "#455147" }] })
+    .expect(400);
+  // Seçenek tanımlı değilse model rengi Pantone adıyla tek seçenek olur ("Doğal" değil).
+  const fallback = (await guest.get("/api/products")).body.find((x) => x._id === p.id);
+  assert.ok(Array.isArray(fallback.colorOptions));
+  const line = await user.post("/api/cart/items").send({ productId: r.body._id, color: "#455147" }).expect(200);
+  assert.match(line.body.items.find((i) => i.productId === r.body._id).colorName, /Cilantro \(Pantone 19-5621 TCX\)/);
+  await user.delete("/api/cart/items/" + r.body._id).expect(200);
+});
+test("FR-032: a scene with several products (set) can be saved and read back", async () => {
+  const d = await user
+    .post("/api/designs")
+    .send({
+      name: "Takımım",
+      x: 0,
+      y: 0,
+      scale: 0.8,
+      rotation: 0,
+      pieces: [
+        { productId: p.id, x: -1, z: 0.5, scale: 1, rotation: 90 },
+        { productId: p.id, x: 1, z: 0.5, scale: 1.2, rotation: 270 },
+      ],
+    })
+    .expect(200);
+  assert.equal(d.body.pieces.length, 2);
+  assert.equal(d.body.productId, p.id);
+  const back = await user.get("/api/designs/" + d.body._id).expect(200);
+  assert.deepEqual(back.body.pieces.map((x) => x.rotation), [90, 270]);
+  await user
+    .post("/api/designs")
+    .send({ name: "Bozuk", x: 0, y: 0, scale: 1, rotation: 0, pieces: [{ productId: p.id, x: 99, z: 0, scale: 1, rotation: 0 }] })
+    .expect(400);
+  await user.delete("/api/designs/" + d.body._id).expect(200);
+});

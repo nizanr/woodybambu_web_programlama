@@ -18,6 +18,7 @@
     "express-session": "^1.18.1",
     "iyzipay": "^2.0.70",
     "mongoose": "^8.13.0",
+    "pantone-tcx": "^2.2.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "three": "^0.175.0",

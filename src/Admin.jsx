@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { pantoneOf } from "./pantone.js";
 import {
   money,
   ROLE_LABELS,
@@ -129,8 +130,22 @@ export default function Admin({ user, api, notify, refresh, editRequest, tabRequ
 }
 
 function Products({ data, editing, setEditing, send }) {
-  const [colors, setColors] = useState(editing?.colors || []);
-  useEffect(() => setColors(editing?.colors || []), [editing]);
+  // Renk seçenekleri: ad boş bırakılırsa ya da otomatik ise HEX'e en yakın
+  // Pantone TCX adı kullanılır; yönetici adı elle değiştirebilir.
+  const toRows = (list) =>
+    (list || []).map((c) => ({
+      hex: c.hex,
+      name: c.name || "",
+      auto: !c.name || c.name === pantoneOf(c.hex)?.name,
+    }));
+  const [colors, setColors] = useState(toRows(editing?.colors));
+  useEffect(() => setColors(toRows(editing?.colors)), [editing]);
+  const [modelColor, setModelColor] = useState(editing?.color || "#b79b77");
+  useEffect(() => setModelColor(editing?.color || "#b79b77"), [editing]);
+  const setRow = (i, patch) => setColors(colors.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+  const dupHex = new Set(
+    colors.map((c) => c.hex.toLowerCase()).filter((h, i, a) => a.indexOf(h) !== i),
+  );
   const modelValue = editing?.model3dUrl ?? "builtin:chair";
   const [modelKind, setModelKind] = useState(
     modelValue.startsWith("https://") ? "url" : modelValue,
@@ -152,7 +167,11 @@ function Products({ data, editing, setEditing, send }) {
           f.stock = +f.stock;
           // Boş ölçü: türe göre varsayılan kullanılır (FR-034).
           for (const k of ["widthCm", "depthCm", "heightCm"]) f[k] = f[k] === "" ? null : +f[k];
-          f.colors = colors.filter((c) => c.name.trim());
+          if (dupHex.size) return; // uyarı formda gösteriliyor
+          f.colors = colors.map((c) => ({
+            hex: c.hex,
+            name: (c.auto ? pantoneOf(c.hex)?.name : c.name.trim()) || pantoneOf(c.hex)?.name || c.hex,
+          }));
           f.model3dUrl = modelKind === "url" ? f.modelUrl.trim() : modelKind;
           delete f.modelUrl;
           const r = await send(
@@ -244,37 +263,58 @@ function Products({ data, editing, setEditing, send }) {
           </label>
         )}
         <label>
-          Model rengi
-          <input name="color" type="color" defaultValue={editing?.color || "#b79b77"} />
+          Model rengi (renk seçeneği eklenmezse müşteriye tek seçenek olarak gösterilir)
+          <span className="color-row">
+            <input
+              name="color"
+              type="color"
+              value={modelColor}
+              onChange={(e) => setModelColor(e.target.value)}
+            />
+            <PantoneTag hex={modelColor} />
+          </span>
         </label>
         <div className="color-editor">
-          <strong>Renk seçenekleri</strong>
-          {colors.map((c, i) => (
-            <span className="chip" key={i}>
-              <input
-                type="color"
-                value={c.hex}
-                aria-label="Renk"
-                onChange={(e) =>
-                  setColors(colors.map((x, j) => (j === i ? { ...x, hex: e.target.value } : x)))
-                }
-              />
-              <input
-                value={c.name}
-                maxLength="30"
-                placeholder="Renk adı"
-                aria-label="Renk adı"
-                onChange={(e) =>
-                  setColors(colors.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))
-                }
-              />
-              <button type="button" onClick={() => setColors(colors.filter((_, j) => j !== i))} aria-label="Rengi sil">
-                ×
-              </button>
-            </span>
-          ))}
+          <strong>Renk seçenekleri ({colors.length}/8)</strong>
+          <small className="muted">
+            Müşteri bu renkler arasından seçim yapar. Ad boş bırakılırsa en yakın
+            Pantone rengi adı otomatik yazılır.
+          </small>
+          {colors.map((c, i) => {
+            const pt = pantoneOf(c.hex);
+            return (
+              <span className={"chip" + (dupHex.has(c.hex.toLowerCase()) ? " dup" : "")} key={i}>
+                <input
+                  type="color"
+                  value={c.hex}
+                  aria-label={`${i + 1}. renk kodu`}
+                  onChange={(e) => setRow(i, { hex: e.target.value })}
+                />
+                <input
+                  value={c.auto ? pt?.name || "" : c.name}
+                  maxLength="30"
+                  placeholder={pt?.name || "Renk adı"}
+                  aria-label={`${i + 1}. renk adı`}
+                  onChange={(e) => setRow(i, { name: e.target.value, auto: !e.target.value.trim() })}
+                />
+                <PantoneTag hex={c.hex} />
+                <button type="button" onClick={() => setColors(colors.filter((_, j) => j !== i))} aria-label={`${i + 1}. rengi sil`}>
+                  ×
+                </button>
+              </span>
+            );
+          })}
+          {dupHex.size > 0 && <small className="warn">Aynı renk kodu iki kez eklenmiş.</small>}
           {colors.length < 8 && (
-            <button type="button" onClick={() => setColors([...colors, { name: "", hex: "#b79b77" }])}>
+            <button
+              type="button"
+              onClick={() =>
+                setColors([
+                  ...colors,
+                  { name: "", auto: true, hex: colors.length ? "#7d8461" : modelColor },
+                ])
+              }
+            >
               + Renk ekle
             </button>
           )}
@@ -659,6 +699,7 @@ function Settings({ api, notify, refresh }) {
         denetim kaydına yazılır.
       </p>
       <form
+        key={s.version}
         className="admin-form settings-form"
         onSubmit={async (e) => {
           e.preventDefault();
@@ -710,6 +751,13 @@ function Settings({ api, notify, refresh }) {
         <button className="primary">Ayarları kaydet</button>
       </form>
       <h2>İndirim kodları</h2>
+      {!s.commerce.couponEnabled && (
+        <p className="warn">
+          chk_coupon_enabled kapalı: müşteriler ödeme ekranında indirim kodu
+          alanını görmez. Yeni bir kod eklediğinizde veya bir kodu aktif
+          yaptığınızda alan otomatik açılır.
+        </p>
+      )}
       <form
         className="admin-form"
         onSubmit={async (e) => {
@@ -722,7 +770,12 @@ function Settings({ api, notify, refresh }) {
             });
             e.target.reset();
             load();
-            notify("İndirim kodu eklendi");
+            refresh();
+            notify(
+              s.commerce.couponEnabled
+                ? "İndirim kodu eklendi"
+                : "İndirim kodu eklendi; ödeme ekranındaki kod alanı açıldı",
+            );
           } catch (err) {
             notify(err.message);
           }
@@ -770,6 +823,7 @@ function Settings({ api, notify, refresh }) {
                           body: JSON.stringify({ isActive: !c.isActive }),
                         });
                         load();
+                        refresh();
                       } catch (err) {
                         notify(err.message);
                       }
@@ -924,5 +978,17 @@ function Overview({ api, isAdmin, notify }) {
         )}
       </div>
     </>
+  );
+}
+
+/* HEX → en yakın Pantone TCX etiketi (ör. "Pantone 16-1324 TCX · Lark"). */
+function PantoneTag({ hex }) {
+  const pt = pantoneOf(hex);
+  if (!pt) return null;
+  return (
+    <small className="pantone-tag" title={`En yakın Pantone karşılığı (${pt.hex})`}>
+      <i style={{ background: pt.hex }} aria-hidden="true" />
+      Pantone {pt.code} · {pt.name}
+    </small>
   );
 }

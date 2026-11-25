@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { VAL, money } from "./util.js";
 import { buildBuiltin } from "./models3d.js";
+import { sizeOf } from "../server/balcony.js";
 
 /* Harici GLB/GLTF modeli; boyutu sahneye sığacak şekilde normalize edilir. */
 async function loadGltf(url, timeoutMs) {
@@ -34,8 +35,39 @@ const readable = (url) =>
     img.src = url;
   });
 
+/* Sahne ölçeği: 1 metre = UNIT birim. Her model gerçek enine göre
+   ölçeklenir; böylece takımdaki ürünler birbirine göre doğru boyutta durur. */
+const UNIT = 2;
+const FLOOR = -0.85;
+const rad = (d) => (d * Math.PI) / 180;
+const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
+let seq = 0;
+const newKey = () => "p" + ++seq;
+
+/* Modeli zemine oturtur, ortalar ve gerçek enine göre ölçekler. */
+function normalize(model, product) {
+  model.updateMatrixWorld(true);
+  const box = new THREE.Box3();
+  model.traverse((o) => {
+    if (o.isMesh && !o.userData.shadow) box.expandByObject(o);
+  });
+  const wrap = new THREE.Group();
+  wrap.add(model);
+  if (box.isEmpty()) return { obj: wrap, radius: 1 };
+  const size = box.getSize(new THREE.Vector3()),
+    center = box.getCenter(new THREE.Vector3());
+  const real = sizeOf(product);
+  const k = real ? ((real.w / 100) * UNIT) / Math.max(size.x, 0.001) : 1;
+  wrap.scale.setScalar(k);
+  wrap.position.set(-center.x * k, FLOOR - box.min.y * k, -center.z * k);
+  const obj = new THREE.Group();
+  obj.add(wrap);
+  return { obj, radius: (Math.hypot(size.x, size.z) * k) / 2 };
+}
+
 export default function Studio({
   product: initial,
+  initialPieces,
   products,
   user,
   api,
@@ -49,23 +81,61 @@ export default function Studio({
   const host = useRef(),
     sceneRef = useRef(null),
     viewRef = useRef(null),
-    modelRef = useRef(null),
+    ringRef = useRef(null),
+    objects = useRef(new Map()),
     fileRef = useRef(null);
   const preview = settings?.preview || { maxPhotoMb: 8, loadTargetSec: 5, saveLayoutEnabled: true };
   const candidates = products.filter((p) => p.model3dUrl && p.isActive !== false);
-  const [product, setProduct] = useState(initial),
+  const productOf = (id) => products.find((p) => p._id === id);
+  const optionsOf = (p) =>
+    p?.colorOptions?.length ? p.colorOptions : p?.color ? [{ hex: p.color.toLowerCase(), name: p.color }] : [];
+  const defaultColor = (p) => pickedColors?.[p._id] || optionsOf(p)[0]?.hex || "";
+  const makePiece = (p, extra = {}) => ({
+    key: newKey(),
+    productId: p._id,
+    color: defaultColor(p),
+    x: 0,
+    z: 0,
+    rotation: 0,
+    scale: 1,
+    ...extra,
+  });
+
+  // Sahnedeki ürünler. Balkon önerisinden gelen takım plan konumlarıyla açılır.
+  const [pieces, setPieces] = useState(() =>
+    initialPieces?.length
+      ? initialPieces.map((ip) =>
+          makePiece(ip.product, {
+            x: ((ip.xCm || 0) / 100) * UNIT,
+            z: ((ip.zCm || 0) / 100) * UNIT,
+            rotation: ip.rotation || 0,
+          }),
+        )
+      : [makePiece(initial)],
+  );
+  // "all" → tüm sahne birlikte taşınır/ölçeklenir; aksi halde seçili ürün.
+  const [active, setActive] = useState("all"),
+    [group, setGroup] = useState(() => ({
+      x: 0,
+      y: 0,
+      rotation: 0,
+      scale: initialPieces?.length > 1 ? 0.8 : 1,
+    })),
     [photo, setPhoto] = useState(null),
-    [scale, setScale] = useState(1),
-    [rotation, setRotation] = useState(0),
     [name, setName] = useState("Bahçem"),
-    [position, setPosition] = useState({ x: 0, y: 0 }),
     [saved, setSaved] = useState([]),
     [savePhoto, setSavePhoto] = useState(false),
     [status, setStatus] = useState("loading"),
     [loadMs, setLoadMs] = useState(null),
+    [addId, setAddId] = useState(""),
     [busy, setBusy] = useState(false);
   const canSave = preview.saveLayoutEnabled && ["customer", "admin"].includes(user?.role);
   const canBuy = !user || ["customer", "admin"].includes(user.role);
+  const multi = pieces.length > 1;
+  const target = multi && pieces.some((p) => p.key === active) ? active : "all";
+  const activePiece = pieces.find((p) => p.key === target);
+  const state = useRef();
+  state.current = { pieces, group, target };
 
   useEffect(() => {
     if (user)
@@ -74,12 +144,12 @@ export default function Studio({
         .catch(() => {});
   }, [user?.id]);
 
-  /* Sahne bir kez kurulur; ürün değişince yalnızca model değişir (FR-030). */
+  /* Sahne bir kez kurulur; ürünler değişince yalnızca modeller değişir (FR-030). */
   useEffect(() => {
     const el = host.current;
     let renderer;
     try {
-      renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+      renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, preserveDrawingBuffer: false });
     } catch {
       // NFR-12: 3D desteklenmeyen tarayıcıda bilgilendir; satın alma akışı etkilenmez.
       setStatus("nowebgl");
@@ -100,6 +170,15 @@ export default function Studio({
     scene.add(light);
     const holder = new THREE.Group();
     scene.add(holder);
+    // Seçili ürünün altındaki halka.
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(0.92, 1, 64),
+      new THREE.MeshBasicMaterial({ color: 0xf2c46b, transparent: true, opacity: 0.9, depthWrite: false }),
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.visible = false;
+    holder.add(ring);
+    ringRef.current = ring;
     let frame;
     const draw = () => {
       frame = requestAnimationFrame(draw);
@@ -116,70 +195,118 @@ export default function Studio({
     resize.observe(el);
     sceneRef.current = holder;
     viewRef.current = { renderer, scene, camera };
+    const objs = objects.current;
     return () => {
       cancelAnimationFrame(frame);
       resize.disconnect();
       disposeTree(scene);
       renderer.dispose();
       renderer.domElement.remove();
+      objs.clear();
       sceneRef.current = null;
       viewRef.current = null;
     };
   }, []);
 
+  /* Sahnedeki ürün listesi ile Three.js nesnelerini eşitler. */
+  const sig = (pc) => pc.productId + "|" + pc.color;
+  const sigs = pieces.map((pc) => pc.key + ":" + sig(pc)).join(",");
   useEffect(() => {
+    const holder = sceneRef.current;
+    if (!holder) return;
+    const map = objects.current;
+    const live = new Set(pieces.map((pc) => pc.key));
+    for (const [k, o] of map)
+      if (!live.has(k)) {
+        holder.remove(o.obj);
+        disposeTree(o.obj);
+        map.delete(k);
+      }
+    const todo = pieces.filter((pc) => map.get(pc.key)?.sig !== sig(pc));
+    if (!todo.length) {
+      setStatus(map.size ? "ready" : "unavailable");
+      return;
+    }
     let cancelled = false;
     const started = performance.now();
-    setStatus((s) => (s === "nowebgl" ? s : "loading"));
-    (async () => {
-      let info;
-      try {
-        // Erişim sunucuda da doğrulanır (BR-024): oturumsuz istek 401 döner.
-        info = await api("/api/preview/" + product._id);
-      } catch (e) {
-        if (!cancelled) {
-          setStatus("unavailable");
-          notify(e.message);
+    setStatus("loading");
+    Promise.all(
+      todo.map(async (pc) => {
+        let info;
+        try {
+          // Ürün yayında ve 3D modeli tanımlı mı? (VAL-018)
+          info = await api("/api/preview/" + pc.productId);
+        } catch (e) {
+          return { pc, error: e.message };
         }
-        return;
-      }
-      const holder = sceneRef.current;
-      if (!holder) return;
-      let model;
-      try {
-        model = info.model3dUrl.startsWith("builtin:")
-          ? buildBuiltin(info.model3dUrl.slice(8), pickedColors?.[product._id] || info.color)
-          : await loadGltf(info.model3dUrl, Math.max(preview.loadTargetSec, 1) * 2000);
-      } catch {
-        if (!cancelled) {
-          setStatus("unavailable");
-          notify(VAL.VAL018);
+        try {
+          const model = info.model3dUrl.startsWith("builtin:")
+            ? buildBuiltin(info.model3dUrl.slice(8), pc.color || info.color)
+            : await loadGltf(info.model3dUrl, Math.max(preview.loadTargetSec, 1) * 2000);
+          return { pc, ...normalize(model, productOf(pc.productId) || info) };
+        } catch {
+          return { pc, error: VAL.VAL018 };
         }
-        return;
+      }),
+    ).then((results) => {
+      const failed = [];
+      for (const r of results) {
+        if (r.error) {
+          failed.push(r);
+          continue;
+        }
+        if (cancelled) {
+          disposeTree(r.obj);
+          continue;
+        }
+        const old = map.get(r.pc.key);
+        if (old) {
+          holder.remove(old.obj);
+          disposeTree(old.obj);
+        }
+        r.obj.userData.key = r.pc.key;
+        holder.add(r.obj);
+        map.set(r.pc.key, { obj: r.obj, sig: sig(r.pc), radius: r.radius });
       }
-      if (cancelled) return disposeTree(model);
-      if (modelRef.current) {
-        holder.remove(modelRef.current);
-        disposeTree(modelRef.current);
+      if (cancelled) return;
+      if (failed.length) {
+        notify(failed[0].error || VAL.VAL018);
+        const bad = new Set(failed.map((r) => r.pc.key));
+        // Yüklenemeyen ürün sahneden çıkarılır; en az bir ürün kalır.
+        setPieces((ps) => (ps.length > bad.size ? ps.filter((p) => !bad.has(p.key)) : ps));
       }
-      holder.add(model);
-      modelRef.current = model;
       setLoadMs(Math.round(performance.now() - started));
-      setStatus("ready");
-    })();
+      setStatus(map.size ? "ready" : "unavailable");
+    });
     return () => {
       cancelled = true;
     };
-  }, [product._id]);
+  }, [sigs]);
 
+  /* Konum/dönüş/ölçek her değişimde nesnelere uygulanır. */
   useEffect(() => {
-    const g = sceneRef.current;
-    if (g) {
-      g.scale.setScalar(scale);
-      g.rotation.y = (rotation * Math.PI) / 180 + 0.4;
-      g.position.set(position.x, position.y, 0);
+    const holder = sceneRef.current;
+    if (!holder) return;
+    holder.scale.setScalar(group.scale);
+    holder.rotation.y = rad(group.rotation) + 0.4;
+    holder.position.set(group.x, group.y, 0);
+    for (const pc of pieces) {
+      const o = objects.current.get(pc.key)?.obj;
+      if (!o) continue;
+      o.position.set(pc.x, 0, pc.z);
+      o.rotation.y = rad(pc.rotation);
+      o.scale.setScalar(pc.scale);
     }
-  }, [scale, rotation, position, status]);
+    const ring = ringRef.current,
+      sel = activePiece && objects.current.get(activePiece.key);
+    if (ring) {
+      ring.visible = Boolean(sel);
+      if (sel) {
+        ring.position.set(activePiece.x, FLOOR + 0.01, activePiece.z);
+        ring.scale.setScalar(Math.max(sel.radius, 0.3) * activePiece.scale);
+      }
+    }
+  });
   useEffect(
     () => () => {
       if (photo?.url) URL.revokeObjectURL(photo.url);
@@ -203,30 +330,84 @@ export default function Studio({
     if (file) usePhotoFile(file);
   };
 
+  /* Hedef: "all" (tüm sahne) ya da bir ürün anahtarı. */
+  const valueOf = (key) => {
+    const { pieces: ps, group: g } = state.current;
+    return key === "all" ? g : ps.find((p) => p.key === key) || g;
+  };
+  const patch = (key, upd) => {
+    if (key === "all") setGroup((g) => ({ ...g, ...(typeof upd === "function" ? upd(g) : upd) }));
+    else
+      setPieces((ps) =>
+        ps.map((p) => (p.key === key ? { ...p, ...(typeof upd === "function" ? upd(p) : upd) } : p)),
+      );
+  };
+  /* Ekrandaki kaydırmayı hedefe uygular: tüm sahne ekran düzleminde,
+     tek ürün zeminde (sahnenin dönüşü ve ölçeği hesaba katılarak) taşınır. */
+  const moveBy = (key, base, dx, dy) => {
+    if (key === "all")
+      return patch(key, {
+        x: clamp(base.x + dx, -10, 10),
+        y: clamp(base.y + dy, -10, 10),
+      });
+    const { group: g } = state.current;
+    const th = rad(g.rotation) + 0.4;
+    const wx = dx / g.scale,
+      wz = (-dy * 2.5) / g.scale; // kamera eğimi: derinlik ekranda kısalır
+    patch(key, {
+      x: clamp(base.x + wx * Math.cos(th) - wz * Math.sin(th), -20, 20),
+      z: clamp(base.z + wx * Math.sin(th) + wz * Math.cos(th), -20, 20),
+    });
+  };
+
+  /* Dokunulan ürünü bulur (raycast). */
+  const pick = (e) => {
+    const view = viewRef.current,
+      holder = sceneRef.current;
+    if (!view || !holder || state.current.pieces.length < 2) return "all";
+    const r = e.currentTarget.getBoundingClientRect();
+    const ndc = new THREE.Vector2(
+      ((e.clientX - r.left) / r.width) * 2 - 1,
+      -((e.clientY - r.top) / r.height) * 2 + 1,
+    );
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera(ndc, view.camera);
+    const roots = [...objects.current.values()].map((o) => o.obj);
+    const hit = ray.intersectObjects(roots, true).find((h) => !h.object.userData.shadow);
+    let o = hit?.object;
+    while (o && !o.userData.key) o = o.parent;
+    return o?.userData.key || "all";
+  };
+
   /* Fare ile sürükleme; dokunmatikte tek parmak sürükleme, iki parmak
      sıkıştırma (ölçek) ve çevirme (döndürme) — FR-029. */
   const pointers = useRef(new Map()),
     gesture = useRef(null);
-  const snapshot = () => {
+  const snapshot = (key) => {
     const pts = [...pointers.current.values()];
-    if (pts.length === 1)
-      gesture.current = { kind: "drag", x: pts[0].x, y: pts[0].y, p: position };
+    const k = key ?? gesture.current?.key ?? state.current.target;
+    const v = valueOf(k);
+    if (pts.length === 1) gesture.current = { kind: "drag", key: k, x: pts[0].x, y: pts[0].y, v: { ...v } };
     else if (pts.length >= 2) {
       const [a, b] = pts;
       gesture.current = {
         kind: "pinch",
+        key: k,
         dist: Math.hypot(b.x - a.x, b.y - a.y),
         angle: Math.atan2(b.y - a.y, b.x - a.x),
-        scale,
-        rotation,
+        v: { ...v },
       };
     } else gesture.current = null;
   };
-  const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
   const onPointerDown = (e) => {
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     e.currentTarget.setPointerCapture(e.pointerId);
-    snapshot();
+    let key;
+    if (pointers.current.size === 1) {
+      key = pick(e);
+      setActive(key);
+    }
+    snapshot(key);
   };
   const onPointerMove = (e) => {
     if (!pointers.current.has(e.pointerId)) return;
@@ -235,23 +416,23 @@ export default function Studio({
     if (!g) return;
     const pts = [...pointers.current.values()];
     if (g.kind === "drag" && pts.length === 1)
-      setPosition({
-        x: clamp(g.p.x + (pts[0].x - g.x) / 90, -10, 10),
-        y: clamp(g.p.y - (pts[0].y - g.y) / 90, -10, 10),
-      });
+      moveBy(g.key, g.v, (pts[0].x - g.x) / 90, -(pts[0].y - g.y) / 90);
     if (g.kind === "pinch" && pts.length >= 2) {
       const [a, b] = pts;
       const dist = Math.hypot(b.x - a.x, b.y - a.y);
       const angle = Math.atan2(b.y - a.y, b.x - a.x);
-      setScale(clamp(+(g.scale * (dist / (g.dist || 1))).toFixed(2), 0.2, 3));
-      setRotation(Math.round((((g.rotation + ((angle - g.angle) * 180) / Math.PI) % 360) + 360) % 360));
+      patch(g.key, {
+        scale: clamp(+(g.v.scale * (dist / (g.dist || 1))).toFixed(2), 0.2, 3),
+        rotation: Math.round((((g.v.rotation + ((angle - g.angle) * 180) / Math.PI) % 360) + 360) % 360),
+      });
     }
   };
   const onPointerEnd = (e) => {
     pointers.current.delete(e.pointerId);
     snapshot();
   };
-  const onWheel = (e) => setScale((s) => clamp(+(s - e.deltaY * 0.001).toFixed(2), 0.2, 3));
+  const onWheel = (e) =>
+    patch(target, (v) => ({ scale: clamp(+(v.scale - e.deltaY * 0.001).toFixed(2), 0.2, 3) }));
   const onKeyDown = (e) => {
     const step = e.shiftKey ? 0.5 : 0.1;
     const moves = {
@@ -262,24 +443,51 @@ export default function Studio({
     };
     if (moves[e.key]) {
       e.preventDefault();
-      setPosition((p) => ({
-        x: clamp(p.x + moves[e.key][0], -10, 10),
-        y: clamp(p.y + moves[e.key][1], -10, 10),
-      }));
+      moveBy(target, valueOf(target), moves[e.key][0], moves[e.key][1]);
       return;
     }
-    // Klavyeyle döndürme (Q/E) ve ölçekleme (+/−) — NFR-03 klavye erişimi.
+    // Sekme ile ürünler arasında geçiş; klavyeyle döndürme (Q/E), ölçek (+/−) — NFR-03.
+    if (e.key.toLowerCase() === "t" && multi) {
+      e.preventDefault();
+      const order = ["all", ...pieces.map((p) => p.key)];
+      setActive(order[(order.indexOf(target) + 1) % order.length]);
+      return;
+    }
     const turn = { q: -15, e: 15 }[e.key.toLowerCase()];
     if (turn) {
       e.preventDefault();
-      setRotation((r) => (((r + turn) % 360) + 360) % 360);
+      patch(target, (v) => ({ rotation: (((v.rotation + turn) % 360) + 360) % 360 }));
       return;
     }
     const zoom = { "+": 0.1, "=": 0.1, "-": -0.1, _: -0.1 }[e.key];
     if (zoom) {
       e.preventDefault();
-      setScale((s) => clamp(+(s + zoom).toFixed(2), 0.2, 3));
+      patch(target, (v) => ({ scale: clamp(+(v.scale + zoom).toFixed(2), 0.2, 3) }));
     }
+    if ((e.key === "Delete" || e.key === "Backspace") && activePiece) {
+      e.preventDefault();
+      removePiece(activePiece.key);
+    }
+  };
+
+  /* Sahneye ürün ekleme / çıkarma / değiştirme. */
+  const addPiece = (p) => {
+    if (!p) return;
+    if (pieces.length >= 12) return notify("Sahneye en fazla 12 ürün ekleyebilirsiniz.");
+    const n = pieces.length;
+    const pc = makePiece(p, { x: clamp(((n % 3) - 1) * 1.6, -20, 20), z: 0.8 + Math.floor(n / 3) * 0.8 });
+    setPieces([...pieces, pc]);
+    setActive(pc.key);
+  };
+  const removePiece = (key) => {
+    if (pieces.length < 2) return;
+    setPieces(pieces.filter((p) => p.key !== key));
+    setActive("all");
+  };
+  const swapPiece = (key, p) => {
+    if (!p) return;
+    const k = key === "all" ? pieces[0].key : key;
+    setPieces(pieces.map((x) => (x.key === k ? { ...x, productId: p._id, color: defaultColor(p) } : x)));
   };
 
   /* Önizlemeyi PNG olarak indirme: fotoğraf + 3D model yalnızca tarayıcıda
@@ -307,9 +515,13 @@ export default function Studio({
       ctx.fillStyle = "#e9e5dc";
       ctx.fillRect(0, 0, out.width, out.height);
     }
-    // WebGL tamponu kare sonunda temizlenir; okumadan hemen önce yeniden çiz.
+    // Seçim halkası görüntüye girmesin; tampon kare sonunda temizlendiği için yeniden çiz.
+    const ring = ringRef.current,
+      was = ring?.visible;
+    if (ring) ring.visible = false;
     view.renderer.render(view.scene, view.camera);
     ctx.drawImage(view.renderer.domElement, 0, 0, out.width, out.height);
+    if (ring) ring.visible = was;
     const link = document.createElement("a");
     link.download = `${(name.trim() || "bahcem").replace(/[^\p{L}\p{N}_-]+/gu, "-")}.png`;
     link.href = out.toDataURL("image/png");
@@ -323,11 +535,18 @@ export default function Studio({
         method: "POST",
         body: JSON.stringify({
           name,
-          productId: product._id,
-          x: +position.x.toFixed(3),
-          y: +position.y.toFixed(3),
-          scale,
-          rotation,
+          x: +group.x.toFixed(3),
+          y: +group.y.toFixed(3),
+          scale: group.scale,
+          rotation: group.rotation,
+          pieces: pieces.map((pc) => ({
+            productId: pc.productId,
+            x: +pc.x.toFixed(3),
+            z: +pc.z.toFixed(3),
+            scale: pc.scale,
+            rotation: pc.rotation,
+            ...(pc.color ? { color: pc.color } : {}),
+          })),
         }),
       });
       let final = d;
@@ -354,12 +573,33 @@ export default function Studio({
     }
   };
   const openSaved = async (d) => {
-    const p = products.find((x) => x._id === d.productId);
-    if (!p) return notify(VAL.VAL018);
-    setProduct(p);
-    setPosition({ x: d.x, y: d.y });
-    setScale(d.scale);
-    setRotation(d.rotation);
+    // Eski kayıtlar tek ürünlüdür (productId); yenileri parça listesi taşır.
+    const list = d.pieces?.length
+      ? d.pieces
+      : [{ productId: d.productId, x: 0, z: 0, scale: 1, rotation: 0 }];
+    const next = list
+      .map((pc) => {
+        const p = productOf(pc.productId);
+        return p?.model3dUrl
+          ? makePiece(p, {
+              x: pc.x,
+              z: pc.z,
+              scale: pc.scale,
+              rotation: pc.rotation,
+              ...(pc.color ? { color: pc.color } : {}),
+            })
+          : null;
+      })
+      .filter(Boolean);
+    if (!next.length) return notify(VAL.VAL018);
+    if (next.length < list.length) notify("Kayıttaki bazı ürünler artık satışta değil.");
+    setPieces(next);
+    setActive("all");
+    setGroup(
+      d.pieces?.length
+        ? { x: d.x, y: d.y, scale: d.scale, rotation: d.rotation }
+        : { x: d.x, y: d.y, scale: d.scale, rotation: d.rotation },
+    );
     setName(d.name);
     if (d.photoRef) {
       try {
@@ -380,6 +620,36 @@ export default function Studio({
       notify(e.message);
     }
   };
+
+  /* Sahnedekileri sepete ekleme: aynı ürün/renk tek satırda toplanır. */
+  const lines = [];
+  for (const pc of pieces) {
+    const p = productOf(pc.productId);
+    if (!p) continue;
+    const l = lines.find((x) => x.product._id === p._id && x.color === pc.color);
+    if (l) l.quantity++;
+    else lines.push({ product: p, color: pc.color, quantity: 1 });
+  }
+  const total = lines.reduce((t, l) => t + l.product.price * l.quantity, 0);
+  const needOf = (id) => lines.filter((l) => l.product._id === id).reduce((t, l) => t + l.quantity, 0);
+  const shortage = lines.filter((l) => needOf(l.product._id) > l.product.stock);
+  const buyAll = async () => {
+    setBusy(true);
+    let ok = 0;
+    try {
+      for (const l of lines) {
+        if (await onAddToCart(l.product, { color: l.color, quantity: l.quantity, quiet: true })) ok += l.quantity;
+        else break;
+      }
+    } finally {
+      setBusy(false);
+    }
+    if (ok) notify(`${ok} ürün sepetinize eklendi`);
+  };
+  const colorName = (p, hex) => optionsOf(p).find((c) => c.hex === hex)?.name;
+  const tv = activePiece || group;
+  const targetLabel = activePiece ? productOf(activePiece.productId)?.name || "Ürün" : multi ? "Tüm sahne" : "Ürün";
+  const single = pieces.length === 1 ? productOf(pieces[0].productId) : null;
 
   return (
     <div className="overlay">
@@ -402,7 +672,7 @@ export default function Studio({
           <div
             className="scene"
             tabIndex={0}
-            aria-label="Önizleme alanı. Ok tuşlarıyla mobilyayı taşıyabilirsiniz."
+            aria-label="Önizleme alanı. Ok tuşlarıyla seçili mobilyayı, T ile ürünler arasında geçiş yapabilirsiniz."
             style={{ backgroundImage: `url(${photo?.url || "/images/garden-hero.png"})` }}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
@@ -426,28 +696,119 @@ export default function Studio({
               </span>
             )}
             <span className="scene-note">
-              Sürükleyerek taşıyın · iki parmakla büyütün/döndürün · tekerlekle ölçekleyin ·
-              klavye: oklar, Q/E, +/−
+              {multi
+                ? "Ürüne dokunup sürükleyin · boş alana dokunup tüm sahneyi taşıyın · iki parmakla büyütün/döndürün · klavye: T ürün seç, oklar, Q/E, +/−, Sil"
+                : "Sürükleyerek taşıyın · iki parmakla büyütün/döndürün · tekerlekle ölçekleyin · klavye: oklar, Q/E, +/−"}
             </span>
           </div>
           <aside>
-            <label>
-              Ürün
-              <select
-                value={product._id}
-                onChange={(e) => setProduct(candidates.find((p) => p._id === e.target.value))}
-              >
-                {candidates.map((p) => (
-                  <option key={p._id} value={p._id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <div className="scene-pieces">
+              <strong>Sahnedeki ürünler ({pieces.length})</strong>
+              {multi && (
+                <button
+                  className={"piece-row all" + (target === "all" ? " on" : "")}
+                  aria-pressed={target === "all"}
+                  onClick={() => setActive("all")}
+                >
+                  Tüm sahne · birlikte taşı/ölçekle
+                </button>
+              )}
+              {pieces.map((pc) => {
+                const p = productOf(pc.productId);
+                const opts = optionsOf(p);
+                return (
+                  <div className={"piece-row" + (pc.key === target ? " on" : "")} key={pc.key}>
+                    <button
+                      className="piece-pick"
+                      aria-pressed={pc.key === target}
+                      onClick={() => setActive(pc.key)}
+                    >
+                      {p?.name || "Ürün"}
+                      {colorName(p, pc.color) && <small>{colorName(p, pc.color)}</small>}
+                    </button>
+                    {opts.length > 1 && (
+                      <span className="swatches" role="group" aria-label={(p?.name || "") + " renkleri"}>
+                        {opts.map((c) => (
+                          <button
+                            type="button"
+                            key={c.hex}
+                            className={"swatch" + (c.hex === pc.color ? " on" : "")}
+                            style={{ background: c.hex }}
+                            title={c.name}
+                            aria-label={c.name}
+                            aria-pressed={c.hex === pc.color}
+                            onClick={() =>
+                              setPieces((ps) => ps.map((x) => (x.key === pc.key ? { ...x, color: c.hex } : x)))
+                            }
+                          />
+                        ))}
+                      </span>
+                    )}
+                    {multi && (
+                      <button
+                        className="icon"
+                        aria-label={(p?.name || "Ürün") + " sahneden çıkar"}
+                        onClick={() => removePiece(pc.key)}
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+              <div className="piece-add">
+                <select value={addId} onChange={(e) => setAddId(e.target.value)} aria-label="Sahneye eklenecek ürün">
+                  <option value="">Ürün seç…</option>
+                  {candidates.map((p) => (
+                    <option key={p._id} value={p._id}>
+                      {p.name} · {money(p.price)}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  className="secondary"
+                  disabled={!addId || pieces.length >= 12}
+                  onClick={() => {
+                    addPiece(productOf(addId));
+                    setAddId("");
+                  }}
+                >
+                  + Sahneye ekle
+                </button>
+              </div>
+              {(activePiece || !multi) && (
+                <label>
+                  {activePiece ? "Seçili ürünü değiştir" : "Ürünü değiştir"}
+                  <select
+                    value={(activePiece || pieces[0]).productId}
+                    onChange={(e) => swapPiece(target, productOf(e.target.value))}
+                  >
+                    {candidates.map((p) => (
+                      <option key={p._id} value={p._id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+            </div>
             <p className="studio-price">
-              <strong>{money(product.price)}</strong> ·{" "}
-              {product.stock > 0 ? `${product.stock} adet stokta` : "Stokta yok"}
+              {single ? (
+                <>
+                  <strong>{money(single.price)}</strong> ·{" "}
+                  {single.stock > 0 ? `${single.stock} adet stokta` : "Stokta yok"}
+                </>
+              ) : (
+                <>
+                  <strong>{money(total)}</strong> · sahnedeki {pieces.length} ürünün toplamı
+                </>
+              )}
             </p>
+            {shortage.length > 0 && !single && (
+              <small className="warn">
+                Stok yetersiz: {[...new Set(shortage.map((l) => l.product.name))].join(", ")}
+              </small>
+            )}
             <p className="representative">
               Önizleme fotoğraf tabanlı ve temsilidir; yüzey, ölçü veya ışık
               algılamaz. Gerçek boyut ve perspektif birebir yansımayabilir.
@@ -463,36 +824,37 @@ export default function Studio({
               />
             </label>
             <small>JPEG veya PNG · en fazla {preview.maxPhotoMb} MB</small>
+            <strong className="target-label">Ayarlanan: {targetLabel}</strong>
             <label>
-              Boyut · {scale.toFixed(2)}×
+              Boyut · {tv.scale.toFixed(2)}×
               <input
                 type="range"
                 min=".2"
                 max="3"
                 step=".05"
-                value={scale}
-                onChange={(e) => setScale(+e.target.value)}
+                value={tv.scale}
+                onChange={(e) => patch(target, { scale: +e.target.value })}
               />
             </label>
             <label>
-              Döndürme · {rotation}°
+              Döndürme · {tv.rotation}°
               <input
                 type="range"
                 min="0"
                 max="360"
-                value={rotation}
-                onChange={(e) => setRotation(+e.target.value)}
+                value={tv.rotation}
+                onChange={(e) => patch(target, { rotation: +e.target.value })}
               />
             </label>
             <button
               className="text-btn"
-              onClick={() => {
-                setScale(1);
-                setRotation(0);
-                setPosition({ x: 0, y: 0 });
-              }}
+              onClick={() =>
+                activePiece
+                  ? patch(target, { scale: 1, rotation: 0 })
+                  : setGroup({ x: 0, y: 0, rotation: 0, scale: multi ? 0.8 : 1 })
+              }
             >
-              Yerleşimi sıfırla
+              {activePiece ? "Seçili ürünü sıfırla" : "Yerleşimi sıfırla"}
             </button>
             <button
               className="text-btn"
@@ -501,15 +863,24 @@ export default function Studio({
             >
               Görüntüyü indir (PNG)
             </button>
-            {canBuy && (
-              <button
-                className="primary"
-                disabled={!product.stock}
-                onClick={() => onAddToCart(product)}
-              >
-                {product.stock ? "Satın al · Sepete ekle" : VAL.VAL004}
-              </button>
-            )}
+            {canBuy &&
+              (single ? (
+                <button
+                  className="primary"
+                  disabled={!single.stock || busy}
+                  onClick={() => onAddToCart(single, { color: pieces[0].color })}
+                >
+                  {single.stock ? "Satın al · Sepete ekle" : VAL.VAL004}
+                </button>
+              ) : (
+                <button
+                  className="primary"
+                  disabled={busy || shortage.length > 0}
+                  onClick={buyAll}
+                >
+                  Sahnedekileri sepete ekle · {money(total)}
+                </button>
+              ))}
             {canSave && (
               <>
                 <label>
