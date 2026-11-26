@@ -1056,6 +1056,8 @@ function App() {
                     ))}
                   </ul>
                 )}
+                {!isStaff && (
+                  <>
                 <h3>Adreslerim</h3>
                 {addresses.map((a) => (
                   <div className="address-row" key={a._id}>
@@ -1091,6 +1093,8 @@ function App() {
                     notify={notify}
                   />
                 </details>
+                  </>
+                )}
                 {settings?.analytics.optionalAnalytics && !isStaff && (
                   <label className="check">
                     <input
